@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "eva-buddy",
+  "version": "1.3.0",
+  "description": "EVA buddy: colored bar / favicon / title for test/acc/prod, hover-EAN-QR on the products overview, and an API-endpoint QR popup.",
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "permissions": ["activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "EVA API endpoint QR"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.test.eva-online.cloud/*",
+        "*://*.acc.eva-online.cloud/*",
+        "*://*.prod.eva-online.cloud/*"
+      ],
+      "js": ["page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "*://*.test.eva-online.cloud/*",
+        "*://*.acc.eva-online.cloud/*",
+        "*://*.prod.eva-online.cloud/*"
+      ],
+      "js": ["qrcode.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="content" hidden>
+      <div id="qr-frame">
+        <div id="qr"></div>
+      </div>
+      <div id="env-switcher">
+        <button data-env="test" type="button" aria-label="Test">🟢</button>
+        <button data-env="acc"  type="button" aria-label="Acceptance">🟠</button>
+        <button data-env="prod" type="button" aria-label="Production">🔴</button>
+      </div>
+    </div>
+    <div id="not-eva" hidden>
+      Open a tab on an EVA environment to see its API QR code.
+    </div>
+    <script src="qrcode.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
