@@ -37,18 +37,14 @@ To get updates after a `git pull`, hit the refresh icon on the extension's card 
 ## Layout
 
 ```
-content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR, easter egg
+content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR
 page-hook.js               — runs in the page world, captures product API responses
 qrcode.js                  — bundled QR generator (port of Project Nayuki's library)
 popup.html / popup.css / popup.js — toolbar popup
 manifest.json              — Manifest V3 config
-icon-source.svg            — source for the toolbar/extension icon
+icon-source.png            — source for the toolbar/extension icon
 icon-16/32/48/128.png      — rendered icon sizes
 ```
-
-
-
-(macOS-only — uses Quick Look + sips. On Linux/Windows, `rsvg-convert` or ImageMagick work just as well.)
 
 ## Credits
 
