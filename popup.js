@@ -1,13 +1,14 @@
 (async () => {
   const ENVS = {
-    test: { color: "#16a34a" },
-    acc:  { color: "#f97316" },
-    prod: { color: "#dc2626" }
+    test: { color: "#16a34a", label: "TEST" },
+    acc:  { color: "#f97316", label: "ACCEPTANCE" },
+    prod: { color: "#dc2626", label: "PRODUCTION" }
   };
 
   const content    = document.getElementById("content");
   const qrFrame    = document.getElementById("qr-frame");
   const qrEl       = document.getElementById("qr");
+  const titleEnvEl = document.getElementById("qr-title-env");
   const switcherEl = document.getElementById("env-switcher");
   const notEvaEl   = document.getElementById("not-eva");
 
@@ -43,10 +44,11 @@
   content.hidden = false;
 
   const renderQr = (env) => {
-    const color  = ENVS[env].color;
+    const { color, label } = ENVS[env];
     const apiUrl = `https://api.${region}.${client}.${env}.eva-online.cloud`;
-    qrFrame.style.setProperty("--env-color", color);
+    content.style.setProperty("--env-color", color);
     qrEl.innerHTML = window.EvaQr.toSvg(apiUrl, { ecc: 1, border: 2 });
+    titleEnvEl.textContent = label;
     switcherEl.querySelectorAll("button[data-env]").forEach((b) => {
       b.classList.toggle("active", b.dataset.env === env);
     });
