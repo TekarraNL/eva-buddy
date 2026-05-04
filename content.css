@@ -55,3 +55,25 @@
   text-align: center;
   letter-spacing: 0.5px;
 }
+
+.eva-copy-flash {
+  position: absolute;
+  z-index: 2147483646;
+  background: rgba(17, 17, 17, 0.94);
+  color: #fff;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 5px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.eva-copy-flash.eva-show {
+  opacity: 1;
+  transform: translateY(0);
+}

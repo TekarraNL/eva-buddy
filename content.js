@@ -106,10 +106,14 @@
   });
 
   // -----------------------------------------------------------
-  // Hover QR tooltip on products-overview pages
+  // Hover QR tooltip on product list pages
   // -----------------------------------------------------------
-  const isProductsOverview = () =>
-    /\/pim\/products\/products-overview(\/|$|\?)/i.test(location.pathname);
+  const HOVER_QR_PATHS = [
+    /^\/pim\/products\/products-overview(\/|$|\?)/i,
+    /^\/stock-management\/availability(\/|$|\?)/i,
+    /^\/stock-management\/overview-and-mutations\/stock-overview(\/|$|\?)/i,
+  ];
+  const isHoverQrPath = () => HOVER_QR_PATHS.some((re) => re.test(location.pathname));
 
   let tipEl = null;
   const ensureTip = () => {
@@ -187,7 +191,7 @@
   };
 
   const onMouseOver = (event) => {
-    if (!isProductsOverview()) return hideTip();
+    if (!isHoverQrPath()) return hideTip();
     const tr = event.target.closest && event.target.closest('tr[role="row"]');
     if (!tr || !tr.querySelector("td")) return hideTip(); // skip header rows
     const key = extractRowKey(tr);
@@ -254,5 +258,53 @@
     new MutationObserver(() => {
       if (!document.getElementById(BAR_ID)) injectBar();
     }).observe(document.body, { childList: true });
+  }
+
+  // -----------------------------------------------------------
+  // Alt-click any numeric ID in the page to copy it to clipboard.
+  // Filters: leaf-ish element, text is purely digits (3+ long).
+  // -----------------------------------------------------------
+  const COPY_FLASH_ID = "eva-copy-flash";
+  const showCopyFlash = (el, text) => {
+    const rect = el.getBoundingClientRect();
+    const flash = document.createElement("div");
+    flash.className = COPY_FLASH_ID;
+    flash.textContent = "Copied " + text;
+    flash.style.left = (rect.left + window.scrollX) + "px";
+    flash.style.top = (rect.top + window.scrollY - 30) + "px";
+    document.body.appendChild(flash);
+    requestAnimationFrame(() => flash.classList.add("eva-show"));
+    setTimeout(() => flash.classList.remove("eva-show"), 700);
+    setTimeout(() => flash.remove(), 1000);
+  };
+
+  document.addEventListener("click", (event) => {
+    if (!event.altKey) return;
+    const target = event.target;
+    if (!target || target.children.length > 0) return;
+    const text = (target.textContent || "").trim();
+    if (text.length > 30 || !/^[0-9]{3,}$/.test(text)) return;
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return;
+    navigator.clipboard.writeText(text).then(
+      () => showCopyFlash(target, text),
+      () => {}
+    );
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+
+  // -----------------------------------------------------------
+  // Popup → content-script bridge: fetch /build.json with the
+  // page's session so the popup can show the EVA suite version.
+  // -----------------------------------------------------------
+  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (!msg || msg.type !== "getBuildJson") return;
+      fetch("/build.json", { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((err) => sendResponse({ ok: false, error: String(err) }));
+      return true; // keep channel open for async response
+    });
   }
 })();

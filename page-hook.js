@@ -11,7 +11,9 @@
   function extract(payload) {
     if (!payload || typeof payload !== "object") return null;
     var products = payload.Products || (payload.Result && payload.Result.Products);
-    if (!Array.isArray(products) || products.length === 0) return null;
+    if (!products || typeof products !== "object") return null;
+    if (!Array.isArray(products)) products = Object.values(products);
+    if (products.length === 0) return null;
 
     var slim = [];
     for (var i = 0; i < products.length; i++) {

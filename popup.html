@@ -18,6 +18,16 @@
         <button data-env="acc"  type="button" aria-label="Acceptance">🟠</button>
         <button data-env="prod" type="button" aria-label="Production">🔴</button>
       </div>
+      <div id="page-jump">
+        <div class="section-label">Open page in</div>
+        <div class="jump-row">
+          <button data-jump-env="test" type="button" aria-label="Open in Test">🟢</button>
+          <button data-jump-env="acc"  type="button" aria-label="Open in Acceptance">🟠</button>
+          <button data-jump-env="prod" type="button" aria-label="Open in Production">🔴</button>
+          <button id="beyond-toggle" type="button" aria-label="Toggle Beyond">🚀</button>
+        </div>
+      </div>
+      <div id="build-chip" hidden></div>
     </div>
     <div id="not-eva" hidden>
       Open a tab on an EVA environment to see its API QR code.

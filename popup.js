@@ -5,12 +5,15 @@
     prod: { color: "#dc2626", label: "PRODUCTION" }
   };
 
-  const content    = document.getElementById("content");
-  const qrFrame    = document.getElementById("qr-frame");
-  const qrEl       = document.getElementById("qr");
-  const titleEnvEl = document.getElementById("qr-title-env");
-  const switcherEl = document.getElementById("env-switcher");
-  const notEvaEl   = document.getElementById("not-eva");
+  const content      = document.getElementById("content");
+  const qrFrame      = document.getElementById("qr-frame");
+  const qrEl         = document.getElementById("qr");
+  const titleEnvEl   = document.getElementById("qr-title-env");
+  const switcherEl   = document.getElementById("env-switcher");
+  const jumperEl     = document.getElementById("page-jump");
+  const beyondBtnEl  = document.getElementById("beyond-toggle");
+  const buildChipEl  = document.getElementById("build-chip");
+  const notEvaEl     = document.getElementById("not-eva");
 
   const showNotEva = () => {
     content.hidden = true;
@@ -30,6 +33,7 @@
   try { host = new URL(tab.url).hostname; }
   catch { showNotEva(); return; }
 
+  const isBeyond = /^beyond--/i.test(host);
   // Strip beyond-- prefix so we resolve to the same API host
   host = host.replace(/^beyond--/i, "");
 
@@ -61,4 +65,50 @@
   });
 
   renderQr(currentEnv);
+
+  // -----------------------------------------------------------
+  // Page-jump: open the same path in another env / toggle Beyond
+  // -----------------------------------------------------------
+  jumperEl.querySelectorAll("button[data-jump-env]").forEach((b) => {
+    b.classList.toggle("current", b.dataset.jumpEnv === currentEnv);
+  });
+  beyondBtnEl.classList.toggle("beyond-on", isBeyond);
+
+  const navigateTab = (newUrl) => {
+    chrome.tabs.update(tab.id, { url: newUrl });
+    window.close();
+  };
+
+  jumperEl.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-jump-env]");
+    if (!btn || btn.classList.contains("current")) return;
+    const u = new URL(tab.url);
+    u.hostname = u.hostname.replace(
+      /\.(test|acc|prod)\.eva-online\.cloud$/i,
+      `.${btn.dataset.jumpEnv}.eva-online.cloud`
+    );
+    navigateTab(u.toString());
+  });
+
+  beyondBtnEl.addEventListener("click", () => {
+    const u = new URL(tab.url);
+    u.hostname = /^beyond--/i.test(u.hostname)
+      ? u.hostname.replace(/^beyond--/i, "")
+      : "beyond--" + u.hostname;
+    navigateTab(u.toString());
+  });
+
+  // -----------------------------------------------------------
+  // Build chip: ask the content script for /build.json
+  // -----------------------------------------------------------
+  chrome.tabs.sendMessage(tab.id, { type: "getBuildJson" }, (resp) => {
+    if (chrome.runtime.lastError) return;
+    if (!resp || !resp.ok || !resp.data || !resp.data.version) return;
+    buildChipEl.textContent = "v" + resp.data.version;
+    const meta = [resp.data.branch, resp.data.commit && resp.data.commit.slice(0, 7)]
+      .filter(Boolean)
+      .join(" · ");
+    if (meta) buildChipEl.title = meta;
+    buildChipEl.hidden = false;
+  });
 })();
