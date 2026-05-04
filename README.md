@@ -10,8 +10,14 @@ The extension doesn't need any extra permissions and just uses what's available 
 - **Colored top stripe** — thin 12px bar at the top of every EVA page in the environment's color (🟢 test / 🟠 acceptance / 🔴 production). Hover for the full hostname.
 - **Tinted favicon** — the EVA logo on a colored background, visible even in unfocused tabs.
 - **🚀 title prefix** for `beyond--` URLs so the Beyond backend stands out.
-- **Hover-to-QR** on the products overview — hover any product row and a QR of its EAN appears next to the cursor
-- **Toolbar popup with API QR** — click the extension icon for a QR of the API endpoint (`api.<region>.<client>.<env>.eva-online.cloud`) framed in the env color. The 🟢 🟠 🔴 buttons under it switch between environments for the same client.
+- **Hover-to-QR** on product rows — hover any product row on the products overview, stock overview, or availability page and a QR of its EAN appears next to the cursor (decoded from the page's own `GetProducts` / `SearchProducts` API responses, no extra requests).
+- **Alt-click any numeric ID** anywhere in EVA to copy it to your clipboard, with a brief flash on the click.
+- **Toolbar popup** — click the extension icon for:
+  - A QR of the API endpoint (`api.<region>.<client>.<env>.eva-online.cloud`), framed in the env color.
+  - 🟢 🟠 🔴 row to switch which env's API QR is shown.
+  - **Open page in** 🟢 🟠 🔴 row to navigate the active tab to the same path on a different env.
+  - 🚀 toggle to swap between Beyond and the regular host for the active tab (highlighted with a circle when Beyond is on).
+  - EVA suite version chip at the bottom (from `/build.json`; hover for branch and commit).
 
 
 ## Supported URLs
@@ -37,7 +43,7 @@ To get updates after a `git pull`, hit the refresh icon on the extension's card 
 ## Layout
 
 ```
-content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR
+content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR, alt-click copy
 page-hook.js               — runs in the page world, captures product API responses
 qrcode.js                  — bundled QR generator (port of Project Nayuki's library)
 popup.html / popup.css / popup.js — toolbar popup
