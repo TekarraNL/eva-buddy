@@ -50,8 +50,11 @@
   const renderQr = (env) => {
     const { color, label } = ENVS[env];
     const apiUrl = `https://api.${region}.${client}.${env}.eva-online.cloud`;
+    // EVA's scanner expects the QR payload to be `CONFIGURE:EVA:<percent-encoded-url>`
+    // so it recognizes it as an environment-config QR and parses the URL cleanly.
+    const qrPayload = `CONFIGURE:EVA:${encodeURIComponent(apiUrl)}`;
     content.style.setProperty("--env-color", color);
-    qrEl.innerHTML = window.EvaQr.toSvg(apiUrl, { ecc: 1, border: 2 });
+    qrEl.innerHTML = window.EvaQr.toSvg(qrPayload, { ecc: 1, border: 2 });
     titleEnvEl.textContent = label;
     switcherEl.querySelectorAll("button[data-env]").forEach((b) => {
       b.classList.toggle("active", b.dataset.env === env);
