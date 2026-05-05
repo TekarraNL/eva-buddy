@@ -12,6 +12,8 @@ The extension doesn't need any extra permissions and just uses what's available 
 - **🚀 title prefix** for `beyond--` URLs so the Beyond backend stands out.
 - **Hover-to-QR** on product rows — hover any product row on the products overview, stock overview, or availability page and a QR of its EAN appears next to the cursor (decoded from the page's own `GetProducts` / `SearchProducts` API responses, no extra requests).
 - **Alt-click any numeric ID** anywhere in EVA to copy it to your clipboard, with a brief flash on the click.
+- **Order list hover preview** — on the orders overview, hover any row to see a labeled tooltip with that order's columns (status, total, customer, dates, etc.) without opening it.
+- **Prev/next order pill** — on any order detail page, a small pill at the top-right (`← N / 25 →`) walks you through the orders in the list you most recently visited. The list is captured to `localStorage` whenever you load `/orders/orders`.
 - **Toolbar popup** — click the extension icon for:
   - A QR of the API endpoint (`api.<region>.<client>.<env>.eva-online.cloud`), framed in the env color.
   - 🟢 🟠 🔴 row to switch which env's API QR is shown.
@@ -43,7 +45,7 @@ To get updates after a `git pull`, hit the refresh icon on the extension's card 
 ## Layout
 
 ```
-content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR, alt-click copy
+content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR, alt-click copy, order helpers
 page-hook.js               — runs in the page world, captures product API responses
 qrcode.js                  — bundled QR generator (port of Project Nayuki's library)
 popup.html / popup.css / popup.js — toolbar popup
