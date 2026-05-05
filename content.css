@@ -77,3 +77,82 @@
   opacity: 1;
   transform: translateY(0);
 }
+
+#eva-order-nav {
+  position: fixed;
+  top: 58px;
+  right: 16px;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #111;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
+  user-select: none;
+}
+
+#eva-order-nav button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 16px;
+  color: #111;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+#eva-order-nav button:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+#eva-order-nav button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+#eva-order-nav .eva-nav-pos {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #666;
+  letter-spacing: 0.2px;
+}
+
+#eva-order-tip {
+  position: fixed;
+  z-index: 2147483646;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+  padding: 10px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: #111;
+  max-width: 360px;
+}
+
+#eva-order-tip dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+}
+
+#eva-order-tip dt {
+  color: #666;
+  font-weight: 500;
+}
+
+#eva-order-tip dd {
+  margin: 0;
+  color: #111;
+  font-variant-numeric: tabular-nums;
+}

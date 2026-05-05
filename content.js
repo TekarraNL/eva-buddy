@@ -179,7 +179,7 @@
 
     // Fall back to first/second cell text (custom_id, then product_id)
     if (!key) {
-      const cells = tr.querySelectorAll('td [role="gridcell"], td span');
+      const cells = tr.querySelectorAll('[role="gridcell"] span, td span, [role="gridcell"], td');
       for (const c of cells) {
         const t = (c.textContent || "").trim();
         if (t && /^[A-Za-z0-9_-]+$/.test(t)) { key = t; break; }
@@ -190,32 +190,172 @@
     return key;
   };
 
+  // -----------------------------------------------------------
+  // Orders list: hover preview, capture for prev/next nav
+  // Orders detail: prev/next nav buttons
+  // -----------------------------------------------------------
+  const ORDER_LIST_KEY = "eva-buddy:order-list";
+  const ORDER_NAV_ID = "eva-order-nav";
+  const ORDER_TIP_ID = "eva-order-tip";
+
+  const isOrdersList = () => /^\/orders\/orders\/?$/.test(location.pathname);
+  const isOrderDetail = () => /^\/orders\/orders\/\d+/.test(location.pathname);
+
+  const captureOrderList = () => {
+    if (!isOrdersList()) return;
+    const links = document.querySelectorAll('a[href^="/orders/orders/"]');
+    const ids = [];
+    links.forEach((a) => {
+      const m = a.getAttribute("href").match(/^\/orders\/orders\/(\d+)/);
+      if (m && !ids.includes(m[1])) ids.push(m[1]);
+    });
+    if (!ids.length) return;
+    try {
+      localStorage.setItem(ORDER_LIST_KEY, JSON.stringify({ ids, at: Date.now() }));
+    } catch (_) {}
+  };
+
+  const renderOrderNav = () => {
+    const existing = document.getElementById(ORDER_NAV_ID);
+    if (!isOrderDetail()) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing) return;
+
+    let stored = null;
+    try { stored = JSON.parse(localStorage.getItem(ORDER_LIST_KEY) || "null"); } catch (_) {}
+    if (!stored || !Array.isArray(stored.ids) || !stored.ids.length) return;
+
+    const m = location.pathname.match(/^\/orders\/orders\/(\d+)/);
+    if (!m) return;
+    const current = m[1];
+    const idx = stored.ids.indexOf(current);
+    if (idx === -1) return;
+
+    const prevId = idx > 0 ? stored.ids[idx - 1] : null;
+    const nextId = idx < stored.ids.length - 1 ? stored.ids[idx + 1] : null;
+
+    const nav = document.createElement("div");
+    nav.id = ORDER_NAV_ID;
+    nav.innerHTML =
+      '<button data-dir="prev"' + (prevId ? "" : " disabled") + ' title="Previous order">←</button>' +
+      '<span class="eva-nav-pos">' + (idx + 1) + " / " + stored.ids.length + "</span>" +
+      '<button data-dir="next"' + (nextId ? "" : " disabled") + ' title="Next order">→</button>';
+    document.body.appendChild(nav);
+
+    nav.addEventListener("click", (e) => {
+      const btn = e.target.closest && e.target.closest("button[data-dir]");
+      if (!btn || btn.disabled) return;
+      const target = btn.dataset.dir === "prev" ? prevId : nextId;
+      if (target) location.href = "/orders/orders/" + target;
+    });
+  };
+
+  let orderTipEl = null;
+  const ensureOrderTip = () => {
+    if (orderTipEl && document.body.contains(orderTipEl)) return orderTipEl;
+    orderTipEl = document.createElement("div");
+    orderTipEl.id = ORDER_TIP_ID;
+    orderTipEl.style.display = "none";
+    document.body.appendChild(orderTipEl);
+    return orderTipEl;
+  };
+  const hideOrderTip = () => {
+    if (orderTipEl) orderTipEl.style.display = "none";
+  };
+  const positionOrderTip = (x, y) => {
+    if (!orderTipEl) return;
+    const PAD = 16;
+    const r = orderTipEl.getBoundingClientRect();
+    const w = r.width || 320;
+    const h = r.height || 180;
+    let nx = x + PAD, ny = y + PAD;
+    if (nx + w > window.innerWidth - 4) nx = x - w - PAD;
+    if (ny + h > window.innerHeight - 4) ny = y - h - PAD;
+    orderTipEl.style.left = Math.max(4, nx) + "px";
+    orderTipEl.style.top = Math.max(4, ny) + "px";
+  };
+  const escapeHtmlChars = (s) =>
+    String(s).replace(/[<>&"']/g, (c) =>
+      ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c])
+    );
+  const buildOrderTipHtml = (tr) => {
+    const grid = tr.closest('[role="grid"], table');
+    const headers = grid
+      ? Array.from(grid.querySelectorAll('[role="columnheader"]')).map((h) =>
+          (h.textContent || "").trim()
+        )
+      : [];
+    const cells = Array.from(tr.querySelectorAll('[role="gridcell"], td'));
+    const items = [];
+    cells.forEach((c, i) => {
+      const label = headers[i] || "";
+      const value = (c.textContent || "").trim().replace(/\s+/g, " ");
+      if (!value) return;
+      items.push("<dt>" + escapeHtmlChars(label) + "</dt><dd>" + escapeHtmlChars(value) + "</dd>");
+    });
+    return items.length ? "<dl>" + items.join("") + "</dl>" : null;
+  };
+  const showOrderTip = (tr, x, y) => {
+    if (!isOrdersList()) return hideOrderTip();
+    if (!tr.querySelector('[role="gridcell"], td')) return hideOrderTip();
+    const html = buildOrderTipHtml(tr);
+    if (!html) return hideOrderTip();
+    const tip = ensureOrderTip();
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    positionOrderTip(x, y);
+  };
+
+  const updateOrderHelpers = () => {
+    captureOrderList();
+    renderOrderNav();
+  };
+
+  // -----------------------------------------------------------
+  // Mouse handlers — drive both hover-QR and order hover preview
+  // -----------------------------------------------------------
   const onMouseOver = (event) => {
-    if (!isHoverQrPath()) return hideTip();
-    const tr = event.target.closest && event.target.closest('tr[role="row"]');
-    if (!tr || !tr.querySelector("td")) return hideTip(); // skip header rows
-    const key = extractRowKey(tr);
-    if (!key) return hideTip();
-    showQrFor(key, event.clientX, event.clientY);
+    const tr = event.target.closest && event.target.closest('[role="row"]');
+    const onQr = isHoverQrPath();
+    const onOrders = isOrdersList();
+    if (!onQr && !onOrders) {
+      hideTip(); hideOrderTip(); return;
+    }
+    if (!tr || !tr.querySelector('td, [role="gridcell"]')) {
+      hideTip(); hideOrderTip(); return;
+    }
+    if (onQr) {
+      const key = extractRowKey(tr);
+      if (!key) return hideTip();
+      showQrFor(key, event.clientX, event.clientY);
+    } else if (onOrders) {
+      showOrderTip(tr, event.clientX, event.clientY);
+    }
   };
 
   const onMouseMove = (event) => {
-    if (!tipEl || tipEl.style.display === "none") return;
-    const tr = event.target.closest && event.target.closest('tr[role="row"]');
-    if (!tr) return hideTip();
-    positionTip(event.clientX, event.clientY);
+    const qrShown = tipEl && tipEl.style.display !== "none";
+    const ordShown = orderTipEl && orderTipEl.style.display !== "none";
+    if (!qrShown && !ordShown) return;
+    const tr = event.target.closest && event.target.closest('[role="row"]');
+    if (!tr) { hideTip(); hideOrderTip(); return; }
+    if (qrShown) positionTip(event.clientX, event.clientY);
+    if (ordShown) positionOrderTip(event.clientX, event.clientY);
   };
 
   const onMouseOut = (event) => {
-    // Hide when leaving any row entirely
     const to = event.relatedTarget;
-    if (!to || !(to.closest && to.closest('tr[role="row"]'))) hideTip();
+    if (!to || !(to.closest && to.closest('[role="row"]'))) {
+      hideTip(); hideOrderTip();
+    }
   };
 
   document.addEventListener("mouseover", onMouseOver, true);
   document.addEventListener("mousemove", onMouseMove, true);
   document.addEventListener("mouseout", onMouseOut, true);
-  window.addEventListener("scroll", hideTip, true);
+  window.addEventListener("scroll", () => { hideTip(); hideOrderTip(); }, true);
 
   // -----------------------------------------------------------
   // Bootstrap + observers
@@ -224,6 +364,7 @@
     injectBar();
     setFavicon();
     setTitle();
+    updateOrderHelpers();
   };
 
   if (document.body) {
@@ -257,6 +398,7 @@
     }
     new MutationObserver(() => {
       if (!document.getElementById(BAR_ID)) injectBar();
+      updateOrderHelpers();
     }).observe(document.body, { childList: true });
   }
 

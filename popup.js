@@ -74,8 +74,12 @@
   });
   beyondBtnEl.classList.toggle("beyond-on", isBeyond);
 
-  const navigateTab = (newUrl) => {
-    chrome.tabs.update(tab.id, { url: newUrl });
+  const navigateTab = (newUrl, { newTab = false } = {}) => {
+    if (newTab) {
+      chrome.tabs.create({ url: newUrl });
+    } else {
+      chrome.tabs.update(tab.id, { url: newUrl });
+    }
     window.close();
   };
 
@@ -87,7 +91,7 @@
       /\.(test|acc|prod)\.eva-online\.cloud$/i,
       `.${btn.dataset.jumpEnv}.eva-online.cloud`
     );
-    navigateTab(u.toString());
+    navigateTab(u.toString(), { newTab: true });
   });
 
   beyondBtnEl.addEventListener("click", () => {
