@@ -9,11 +9,21 @@
     "48": "icon-48.png",
     "128": "icon-128.png"
   },
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "storage"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "EVA API endpoint QR"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer.html", "viewer.css", "viewer.js"],
+      "matches": [
+        "*://*.test.eva-online.cloud/*",
+        "*://*.acc.eva-online.cloud/*",
+        "*://*.prod.eva-online.cloud/*"
+      ]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [

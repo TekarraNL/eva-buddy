@@ -23,6 +23,112 @@
   background-color: #dc2626;
 }
 
+#eva-env-bar-lip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 16px;
+  border: none;
+  border-radius: 0 0 8px 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+  padding: 0 0 1px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+  transition: width 0.15s ease, color 0.15s ease;
+}
+
+#eva-env-bar-lip.eva-env-test  { background-color: #16a34a; }
+#eva-env-bar-lip.eva-env-acc   { background-color: #f97316; }
+#eva-env-bar-lip.eva-env-prod  { background-color: #dc2626; }
+
+#eva-env-bar-lip:hover {
+  width: 56px;
+}
+
+#eva-env-bar-dropdown {
+  position: fixed;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483646;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #111;
+  width: 360px;
+  max-height: 60vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#eva-env-bar-dropdown .eva-dd-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #777;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fafafa;
+}
+
+#eva-env-bar-dropdown .eva-dd-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+#eva-env-bar-dropdown .eva-dd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+#eva-env-bar-dropdown .eva-dd-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+#eva-env-bar-dropdown .eva-dd-row:last-child {
+  border-bottom: none;
+}
+
+#eva-env-bar-dropdown .eva-dd-name {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+#eva-env-bar-dropdown .eva-dd-time {
+  color: #888;
+  font-size: 11px;
+}
+
+#eva-env-bar-dropdown .eva-dd-empty {
+  padding: 16px 12px;
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+}
+
 #eva-env-qr-tip {
   position: fixed;
   z-index: 2147483646;
@@ -76,6 +182,14 @@
 .eva-copy-flash.eva-show {
   opacity: 1;
   transform: translateY(0);
+}
+
+a.eva-has-return {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  padding: 6px 12px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
 }
 
 #eva-order-nav {

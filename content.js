@@ -15,9 +15,117 @@
   const isBeyond = /^beyond--/i.test(host);
 
   const BAR_ID = "eva-env-indicator-bar";
+  const BAR_LIP_ID = "eva-env-bar-lip";
+  const BAR_DROPDOWN_ID = "eva-env-bar-dropdown";
   const FAVICON_ID = "eva-env-indicator-favicon";
   const QR_TIP_ID = "eva-env-qr-tip";
   const TITLE_PREFIX = isBeyond ? "🚀 " : "";
+
+  // Rolling buffer of EVA API responses for the current page (newest first)
+  const MAX_CAPTURES = 50;
+  const captures = [];
+  let captureSeq = 0;
+
+  // -----------------------------------------------------------
+  // Captured-responses dropdown (anchored under the bar lip)
+  // -----------------------------------------------------------
+  const dropdownIsOpen = () => !!document.getElementById(BAR_DROPDOWN_ID);
+
+  const formatRelativeTime = (ts) => {
+    const diff = Math.max(0, Date.now() - ts);
+    if (diff < 1000) return "just now";
+    if (diff < 60_000) return Math.floor(diff / 1000) + "s ago";
+    if (diff < 3_600_000) return Math.floor(diff / 60_000) + "m ago";
+    return Math.floor(diff / 3_600_000) + "h ago";
+  };
+
+  const renderDropdown = () => {
+    const dd = document.getElementById(BAR_DROPDOWN_ID);
+    if (!dd) return;
+    if (captures.length === 0) {
+      dd.innerHTML = '<div class="eva-dd-empty">No API responses captured yet on this page. Interact with EVA to populate.</div>';
+      return;
+    }
+    const rows = captures.map((c) => {
+      const safe = (s) => String(s).replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[ch]));
+      return `<button type="button" class="eva-dd-row" data-cap-id="${c.id}">
+        <span class="eva-dd-name">${safe(c.endpoint)}</span>
+        <span class="eva-dd-time">${formatRelativeTime(c.timestamp)}</span>
+      </button>`;
+    }).join("");
+    dd.innerHTML =
+      `<div class="eva-dd-header">${captures.length} response${captures.length === 1 ? "" : "s"} on this page</div>` +
+      `<div class="eva-dd-list">${rows}</div>`;
+    dd.querySelectorAll(".eva-dd-row").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = Number(btn.getAttribute("data-cap-id"));
+        const cap = captures.find((c) => c.id === id);
+        if (cap) openViewer(cap);
+        closeDropdown();
+      });
+    });
+  };
+
+  const openDropdown = () => {
+    if (dropdownIsOpen()) return;
+    const dd = document.createElement("div");
+    dd.id = BAR_DROPDOWN_ID;
+    document.body.appendChild(dd);
+    renderDropdown();
+    setTimeout(() => {
+      document.addEventListener("click", outsideClickClose, true);
+      document.addEventListener("keydown", escClose);
+    }, 0);
+  };
+
+  const closeDropdown = () => {
+    const dd = document.getElementById(BAR_DROPDOWN_ID);
+    if (dd) dd.remove();
+    document.removeEventListener("click", outsideClickClose, true);
+    document.removeEventListener("keydown", escClose);
+  };
+
+  const toggleDropdown = () => (dropdownIsOpen() ? closeDropdown() : openDropdown());
+
+  const outsideClickClose = (e) => {
+    const dd = document.getElementById(BAR_DROPDOWN_ID);
+    if (!dd) return;
+    if (dd.contains(e.target)) return;
+    const lip = document.getElementById(BAR_LIP_ID);
+    if (lip && lip.contains(e.target)) return;
+    closeDropdown();
+  };
+
+  const escClose = (e) => {
+    if (e.key === "Escape") closeDropdown();
+  };
+
+  const openViewer = (cap) => {
+    try {
+      const id = "eva-cap-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      const url = chrome.runtime.getURL("viewer.html") + "#" + id;
+      // Open the window FIRST while the user-gesture token is still valid;
+      // popup blockers will eat us if we await anything before window.open.
+      const opened = window.open(url, "_blank");
+      if (!opened) console.warn("[eva-buddy] viewer window.open returned null (popup blocked?)");
+      // Stash the payload in chrome.storage.local (session storage isn't
+      // accessible from content scripts by default). The viewer removes the
+      // entry after reading so we don't leak data to disk.
+      chrome.storage.local.set({
+        [id]: {
+          endpoint: cap.endpoint,
+          url: cap.url,
+          timestamp: cap.timestamp,
+          data: cap.data,
+        },
+      });
+    } catch (err) {
+      console.error("[eva-buddy] failed to open viewer:", err);
+    }
+  };
 
   // -----------------------------------------------------------
   // Top bar
@@ -28,6 +136,20 @@
     bar.id = BAR_ID;
     bar.className = `eva-env-${env.key}`;
     bar.title = `EVA ${env.label}${isBeyond ? " (beyond)" : ""} — ${host}`;
+
+    const lip = document.createElement("button");
+    lip.id = BAR_LIP_ID;
+    lip.type = "button";
+    lip.className = `eva-env-${env.key}`;
+    lip.setAttribute("aria-label", "Show captured API responses");
+    lip.title = "Captured API responses for this page";
+    lip.textContent = "▾";
+    lip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleDropdown();
+    });
+    bar.appendChild(lip);
+
     (document.body || document.documentElement).appendChild(bar);
   };
 
@@ -98,12 +220,67 @@
     }
   };
 
+  // Walk a JSON tree, collect any object that looks like a product (has a
+  // barcodes array + at least one id-ish field). Capped depth to keep it cheap.
+  const looksLikeProduct = (n) =>
+    n && typeof n === "object" &&
+    Array.isArray(n.barcodes) && n.barcodes.length > 0 &&
+    (n.product_id != null || n.custom_id != null || n.backend_id != null);
+  const collectProducts = (node, depth, out, seen) => {
+    if (!node || typeof node !== "object" || depth > 8) return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) collectProducts(item, depth + 1, out, seen);
+      return;
+    }
+    if (looksLikeProduct(node)) out.push(node);
+    for (const k of Object.keys(node)) collectProducts(node[k], depth + 1, out, seen);
+  };
+
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
-    const data = event.data;
-    if (!data || data.source !== "EVA_ENV_PRODUCTS") return;
-    indexProducts(data.products);
+    const msg = event.data;
+    if (!msg || msg.source !== "EVA_ENV_API_RESPONSE") return;
+
+    // Add to capture buffer
+    captures.unshift({
+      id: ++captureSeq,
+      endpoint: msg.endpoint,
+      url: msg.url,
+      timestamp: msg.timestamp,
+      data: msg.data,
+    });
+    if (captures.length > MAX_CAPTURES) captures.length = MAX_CAPTURES;
+    if (dropdownIsOpen()) renderDropdown();
+
+    // Update product index from any product-shaped objects in the response
+    const found = [];
+    collectProducts(msg.data, 0, found, new WeakSet());
+    if (found.length) indexProducts(found);
+
+    // Stash auth-like headers from this call so we can replay other endpoints.
+    if (msg.requestHeaders) {
+      const auth = {};
+      for (const k of Object.keys(msg.requestHeaders)) {
+        if (/^(authorization|auth|eva-|x-)/i.test(k)) auth[k] = msg.requestHeaders[k];
+      }
+      if (Object.keys(auth).length) lastAuthHeaders = auth;
+    }
+
+    // If we're on an order detail page, re-evaluate the return highlight now
+    // that we have fresh data — don't wait for the next setInterval tick.
+    try { updateReturnHighlight && updateReturnHighlight(); } catch (_) {}
+    // And opportunistically fire our own GetReturnOrdersForOrder replay
+    // for this order if we haven't already.
+    try { maybeReplayReturnFetch && maybeReplayReturnFetch(); } catch (_) {}
+    // Inject the Backend ID row on consumer general-info pages once GetUser data lands.
+    try { maybeInjectBackendIdRow && maybeInjectBackendIdRow(); } catch (_) {}
   });
+
+  // Auth headers harvested from any captured EVA call; reused to replay
+  // endpoints that the current page hasn't loaded on its own.
+  let lastAuthHeaders = null;
 
   // -----------------------------------------------------------
   // Hover QR tooltip on product list pages
@@ -434,6 +611,277 @@
     event.preventDefault();
     event.stopPropagation();
   }, true);
+
+  // -----------------------------------------------------------
+  // Dashboard search → orders quick-jump
+  //
+  // EVA's dashboard search only navigates between admin pages. If the user
+  // types something that looks like an order display ID or a customer email
+  // and presses Enter, jump straight to /orders/orders with the term applied
+  // as a search via the `?query=` parameter that EVA's orders list honors.
+  // -----------------------------------------------------------
+  const DASHBOARD_SEARCH_PATH = /^\/dashboard\/search(\/|\?|$)/i;
+
+  const detectSearchTerm = (raw) => {
+    const t = (raw || "").trim();
+    if (!t) return null;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return t; // email
+    if (/^[0-9]+$/.test(t)) return t;                    // numeric ID
+    return null;
+  };
+
+  if (DASHBOARD_SEARCH_PATH.test(location.pathname)) {
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const target = e.target;
+      if (!target || target.tagName !== "INPUT") return;
+      if (target.getAttribute("role") !== "combobox") return;
+      const term = detectSearchTerm(target.value);
+      if (!term) return; // let EVA's default page-search handle it
+      e.preventDefault();
+      e.stopPropagation();
+      location.href = "/orders/orders?limit=25&query=" + encodeURIComponent(term);
+    }, true);
+  }
+
+  // -----------------------------------------------------------
+  // Order detail: highlight the "Related orders" tab when this
+  // order is marked as returned/refunded. We read it from the
+  // captured GetOrder API response (reliable), with a tight DOM
+  // fallback so the highlight still appears on the order-details
+  // tab during the brief window before captures arrive.
+  // -----------------------------------------------------------
+  const ORDER_DETAIL_PATH = /^\/orders\/orders\/(\d+)(\/|$)/i;
+
+  // Strings in *captured* fields are pretty controlled — match "return" or
+  // "refund" anywhere as a word.
+  const isReturnishField = (text) =>
+    typeof text === "string" && /\b(return|refund)/i.test(text);
+
+  // DOM text is noisy — only match short exact labels EVA uses for status.
+  const RETURN_LABELS = [
+    /^Order Returned$/i,
+    /^Partially Returned$/i,
+    /^Refunded$/i,
+    /^Order Refunded$/i,
+  ];
+  const isReturnLabel = (text) => {
+    const t = (text || "").trim();
+    return t.length > 0 && t.length < 30 && RETURN_LABELS.some((re) => re.test(t));
+  };
+
+  // Walk an order-object up to a few levels deep looking for return signals.
+  // Handles snake_case + nested status objects + arrays of related items.
+  const orderObjectIsReturnFlagged = (root) => {
+    const STATUS_KEY_RE = /status|type|state|reason|kind|label|name/i;
+    const RETURN_KEY_RE = /return|refund/i;
+
+    const walk = (node, depth) => {
+      if (!node || typeof node !== "object" || depth > 5) return false;
+      if (Array.isArray(node)) {
+        for (const c of node) if (walk(c, depth + 1)) return true;
+        return false;
+      }
+      for (const k of Object.keys(node)) {
+        const v = node[k];
+        // 1. Boolean flag (is_returned, has_return_lines, IsReturned, …)
+        if (RETURN_KEY_RE.test(k) && v === true) return true;
+        // 2. String status/type/name field whose value mentions return/refund
+        if (typeof v === "string" && STATUS_KEY_RE.test(k) && isReturnishField(v)) {
+          return true;
+        }
+        // 3. Non-empty array under a return-related key (e.g. return_lines[])
+        if (Array.isArray(v) && v.length > 0 && RETURN_KEY_RE.test(k)) return true;
+        // 4. Recurse into nested objects/arrays
+        if (v && typeof v === "object") {
+          if (walk(v, depth + 1)) return true;
+        }
+      }
+      return false;
+    };
+
+    return walk(root, 0);
+  };
+
+  const findOrderById = (node, orderId, depth, seen) => {
+    if (!node || typeof node !== "object" || depth > 6 || seen.has(node)) return null;
+    seen.add(node);
+    if (!Array.isArray(node)) {
+      if (
+        (node.id != null && String(node.id) === orderId) ||
+        (node.order_id != null && String(node.order_id) === orderId) ||
+        (node.OrderID != null && String(node.OrderID) === orderId)
+      ) {
+        return node;
+      }
+    }
+    const keys = Array.isArray(node) ? node.map((_, i) => i) : Object.keys(node);
+    for (const k of keys) {
+      const f = findOrderById(node[k], orderId, depth + 1, seen);
+      if (f) return f;
+    }
+    return null;
+  };
+
+  const responseHasAnyArrayItem = (data) => {
+    const seen = new WeakSet();
+    const walk = (node, depth) => {
+      if (!node || typeof node !== "object" || depth > 4 || seen.has(node)) return false;
+      seen.add(node);
+      if (Array.isArray(node)) return node.length > 0;
+      for (const k of Object.keys(node)) {
+        if (walk(node[k], depth + 1)) return true;
+      }
+      return false;
+    };
+    return walk(data, 0);
+  };
+
+  const orderHasReturnInCaptures = (orderId) => {
+    for (const cap of captures) {
+      if (!cap || !cap.data) continue;
+      const ep = (cap.endpoint || "").toLowerCase();
+      // Definitive endpoint: any items in this response == this order has returns
+      if (ep === "getreturnordersfororder") {
+        if (responseHasAnyArrayItem(cap.data)) return true;
+        continue;
+      }
+      if (!ep.includes("order")) continue;
+      const order = findOrderById(cap.data, orderId, 0, new WeakSet());
+      if (order && orderObjectIsReturnFlagged(order)) return true;
+    }
+    return false;
+  };
+
+  const orderHasReturnInDom = () => {
+    if (!document.body) return false;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      if (isReturnLabel(n.nodeValue)) return true;
+    }
+    return false;
+  };
+
+  function updateReturnHighlight() {
+    const m = location.pathname.match(ORDER_DETAIL_PATH);
+    if (!m) return;
+    const orderId = m[1];
+    const link = document.querySelector(
+      `a[href$="/orders/orders/${orderId}/related-orders"]`
+    );
+    if (!link) return;
+    const returned =
+      orderHasReturnInCaptures(orderId) || orderHasReturnInDom();
+    link.classList.toggle("eva-has-return", returned);
+  }
+  setInterval(updateReturnHighlight, 1000);
+
+  // Fire GetReturnOrdersForOrder ourselves so the dot appears on /order-details
+  // without the user having to click into /related-orders first.
+  const replayedOrders = new Set();
+  function maybeReplayReturnFetch() {
+    const m = location.pathname.match(ORDER_DETAIL_PATH);
+    if (!m) return;
+    const orderId = m[1];
+    if (replayedOrders.has(orderId)) return;
+    if (!lastAuthHeaders) return; // wait for first captured call
+    replayedOrders.add(orderId);
+    const apiHost = location.hostname.replace(/^beyond--/i, "");
+    const apiUrl = `https://api.${apiHost}/message/GetReturnOrdersForOrder`;
+    window.postMessage({
+      source: "EVA_BUDDY_REPLAY_FETCH",
+      url: apiUrl,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...lastAuthHeaders },
+      body: JSON.stringify({ OrderID: orderId }),
+    }, "*");
+  }
+
+  // -----------------------------------------------------------
+  // Consumer general-info: inject Backend ID as a new row.
+  // GetUser returns the field but EVA's UI doesn't surface it.
+  // -----------------------------------------------------------
+  const CONSUMER_GI_PATH = /^\/people\/consumers\/(\d+)\/general-info(\/|$|\?)/i;
+  const BACKEND_ID_KEYS = ["BackendID", "backend_id", "backendId", "BackendId"];
+  const USER_ID_KEYS = ["ID", "id", "UserID", "user_id", "userId"];
+
+  function findUserBackendId(data, userId) {
+    const seen = new WeakSet();
+    let fallback = null;
+    const walk = (node, depth) => {
+      if (!node || typeof node !== "object" || depth > 6 || seen.has(node)) return null;
+      seen.add(node);
+      if (!Array.isArray(node)) {
+        const beKey = BACKEND_ID_KEYS.find((k) => node[k] != null);
+        if (beKey) {
+          // Prefer the object whose ID matches the URL's consumer ID.
+          const idKey = USER_ID_KEYS.find((k) => node[k] != null);
+          if (idKey && String(node[idKey]) === userId) return node[beKey];
+          if (fallback == null) fallback = node[beKey];
+        }
+      }
+      const keys = Array.isArray(node) ? node.map((_, i) => i) : Object.keys(node);
+      for (const k of keys) {
+        const r = walk(node[k], depth + 1);
+        if (r != null) return r;
+      }
+      return null;
+    };
+    const matched = walk(data, 0);
+    return matched != null ? matched : fallback;
+  }
+
+  function getBackendIdFromCaptures(userId) {
+    for (const cap of captures) {
+      if (!cap || !cap.data) continue;
+      const ep = (cap.endpoint || "").toLowerCase();
+      if (!ep.includes("getuser")) continue;
+      const val = findUserBackendId(cap.data, userId);
+      if (val != null) return String(val);
+    }
+    return null;
+  }
+
+  const escapeHtmlSimple = (s) =>
+    String(s).replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
+
+  function maybeInjectBackendIdRow() {
+    const m = location.pathname.match(CONSUMER_GI_PATH);
+    if (!m) return;
+    const userId = m[1];
+
+    // Find the General information rows list inside the card.
+    const heading = Array.from(document.querySelectorAll("h2")).find(
+      (h) => /general information/i.test((h.textContent || "").trim())
+    );
+    if (!heading) return;
+    const card = heading.closest('[class*="rounded-lg"]') || heading.parentElement;
+    if (!card) return;
+    const list = Array.from(card.querySelectorAll("div")).find(
+      (d) => d.className === "flex flex-col gap-5 w-full"
+    );
+    if (!list) return;
+    if (list.querySelector('[data-eva-buddy="backend-id-row"]')) return;
+
+    const value = getBackendIdFromCaptures(userId);
+    if (value == null) return;
+
+    const row = document.createElement("div");
+    row.className = "sm:grid sm:grid-cols-3 sm:gap-5 leading-none box-border";
+    row.setAttribute("data-eva-buddy", "backend-id-row");
+    row.innerHTML =
+      '<div class="font-semibold text-wrap break-words box-border">' +
+        '<span class="text-primary text-base font-semibold">Backend ID</span>' +
+      "</div>" +
+      '<div class="sm:col-span-2 box-border">' +
+        '<span class="text-primary text-base">' + escapeHtmlSimple(value) + "</span>" +
+      "</div>";
+    list.appendChild(row);
+  }
+  setInterval(maybeInjectBackendIdRow, 1000);
 
   // -----------------------------------------------------------
   // Popup → content-script bridge: fetch /build.json with the

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EVA response</title>
+    <link rel="stylesheet" href="viewer.css" />
+  </head>
+  <body>
+    <header id="header" hidden>
+      <div class="title-row">
+        <h1 id="endpoint"></h1>
+        <span id="env-pill"></span>
+      </div>
+      <div class="meta">
+        <span id="url"></span>
+        <span class="dot">·</span>
+        <span id="when"></span>
+        <span class="dot">·</span>
+        <span id="row-count"></span>
+      </div>
+      <div class="controls">
+        <input type="search" id="filter" placeholder="Filter by path or value…" autocomplete="off" />
+        <button type="button" id="copy-all" title="Copy all visible rows as TSV">Copy</button>
+      </div>
+    </header>
+    <main id="content">Loading…</main>
+    <script src="viewer.js"></script>
+  </body>
+</html>
