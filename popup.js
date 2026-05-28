@@ -1,3 +1,30 @@
+// -----------------------------------------------------------
+// Theme: manual dark-mode toggle, persisted in localStorage.
+// Runs synchronously (and independent of EVA detection) so the
+// saved theme applies immediately with no flash.
+// -----------------------------------------------------------
+(() => {
+  const THEME_KEY = "eva-buddy:popup-theme";   // popup's own appearance (instant, no flash)
+  const SHARED_KEY = "eva-buddy:dark-mode";     // shared flag the EVA content script reads
+  const toggle = document.getElementById("theme-toggle");
+  const apply = (dark) => {
+    document.body.classList.toggle("eva-dark", dark);
+    if (toggle) toggle.textContent = dark ? "☀️" : "🌙";
+  };
+  let dark = false;
+  try { dark = localStorage.getItem(THEME_KEY) === "dark"; } catch (_) {}
+  apply(dark);
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      dark = !document.body.classList.contains("eva-dark");
+      apply(dark);
+      try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (_) {}
+      // Drive EVA's page dark mode too (content script listens for this key).
+      try { chrome.storage.local.set({ [SHARED_KEY]: dark }); } catch (_) {}
+    });
+  }
+})();
+
 (async () => {
   const ENVS = {
     test: { color: "#16a34a", label: "TEST" },

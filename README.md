@@ -17,6 +17,8 @@ The extension doesn't need any extra permissions and just uses what's available 
 - **Related orders tab highlighted on returns** — when an order has any return attached, the **Related orders** tab on the order detail page is filled with a red pill so you can see at a glance there's something to investigate. The extension auto-replays `GetReturnOrdersForOrder` using auth headers harvested from a real captured EVA call, so the highlight appears immediately on `/order-details` — you don't have to click into the Related orders tab first.
 - **Backend ID on consumer pages** — on `/people/consumers/<id>/general-info`, a **Backend ID** row is appended to the General information section, pulled from the captured `GetUser` response (EVA returns this but doesn't display it).
 - **Dashboard search → orders quick-jump** — on `/dashboard/search`, typing a number (order ID) or an email and pressing Enter routes you straight to `/orders/orders?query=<value>` instead of EVA's default page-search behavior. Other inputs pass through to EVA's normal search.
+- **Module quick-switch** — click the module name/icon next to the EVA logo (top-left, which normally does nothing) to open a dropdown of all admin modules (Compliance, Control room, Financials, Orders, Organizations, People, PIM, Promotions, Stock, Tasks) with their real EVA icons, the current one highlighted. Works on every admin page. Icons are harvested live from EVA and cached, with a branded-color initial as the fallback until cached. The menu also includes **Web POS** (EVA's `/pos/` app, which has no dashboard tile) pointing at the current environment's POS, using a bundled logo.
+- **Dark mode** — the 🌙 toggle in the popup darkens both the popup *and* the entire EVA admin UI. EVA has no native dark theme, so this is a "smart invert" of EVA's app root (soft `~#1a` surfaces, lightened borders for separation, images/brand colors re-inverted to stay correct). The colored env stripe and all of eva-buddy's own UI keep their true colors. The preference is shared via `chrome.storage.local` and applied before paint, so it persists and doesn't flash.
 - **API-response viewer ("the lip")** — a small lip in the middle of the colored top stripe. Click it to see all of the page's captured API responses, listed by endpoint. Click any one to open it in a new tab as a viewer that flattens the JSON to one row per leaf value, with:
   - Filter box that matches against both path and value.
   - Click the path or value cell to copy it.
@@ -56,16 +58,18 @@ To get updates after a `git pull`, hit the refresh icon on the extension's card 
 ```
 content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR, alt-click copy,
                              order helpers, dashboard hijack, related-orders highlight,
-                             consumer Backend ID injection, bar-lip viewer trigger
+                             consumer Backend ID injection, bar-lip viewer trigger,
+                             module quick-switch dropdown, EVA dark mode (smart invert)
 page-hook.js               — runs in the page world; captures every EVA /message/* response
                              (and its request headers), forwards them to content.js, and
                              accepts replay-fetch requests using harvested auth headers
 qrcode.js                  — bundled QR generator (port of Project Nayuki's library)
-popup.html / popup.css / popup.js — toolbar popup (API QR, env jump, Beyond toggle, build chip)
+popup.html / popup.css / popup.js — toolbar popup (API QR, env jump, Beyond toggle, build chip, dark-mode toggle)
 viewer.html / viewer.css / viewer.js — JSON viewer opened from the bar-lip dropdown
 manifest.json              — Manifest V3 config
 icon-source.png            — source for the toolbar/extension icon
 icon-16/32/48/128.png      — rendered icon sizes
+pos-logo.png               — bundled Web POS icon for the module switcher
 ```
 
 ## Credits

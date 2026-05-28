@@ -8,6 +8,29 @@ body {
   background: #fafafa;
   color: #111;
   width: 260px;
+  position: relative;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+#theme-toggle {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 5;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+#theme-toggle:hover {
+  opacity: 1;
+  transform: scale(1.15);
 }
 
 #content,
@@ -152,4 +175,42 @@ body {
   color: #999;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.3px;
+}
+
+/* -----------------------------------------------------------
+   Dark mode (manual toggle adds .eva-dark to <body>)
+   The QR frame stays white on purpose — QR codes need a light
+   background to scan reliably.
+   ----------------------------------------------------------- */
+body.eva-dark {
+  background: #1c1c1e;
+  color: #e5e5e7;
+}
+
+body.eva-dark #qr-title {
+  color: #98989d;
+}
+
+body.eva-dark #env-switcher button.active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+body.eva-dark #not-eva {
+  color: #98989d;
+}
+
+body.eva-dark #page-jump {
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+body.eva-dark .section-label {
+  color: #8e8e93;
+}
+
+body.eva-dark #beyond-toggle.beyond-on {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+body.eva-dark #build-chip {
+  color: #6e6e73;
 }
