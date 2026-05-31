@@ -79,3 +79,9 @@ QR generation is a JavaScript port of [Project Nayuki's QR Code generator librar
 ## License
 
 MIT — see `LICENSE`.
+
+## Disclaimer
+
+EVA Buddy is an independent, third-party browser extension. It is **not** affiliated with, endorsed by, or sponsored by New Black B.V. or any of its subsidiaries. "EVA", "EVA Commerce", and related names and logos are trademarks of their respective owners and are used here solely to describe which product this extension works with.
+
+See [PRIVACY.md](PRIVACY.md) for the privacy policy.
