@@ -133,6 +133,51 @@
   });
 
   // -----------------------------------------------------------
+  // Find product by Backend ID → open its product page
+  // -----------------------------------------------------------
+  const lookupInput = document.getElementById("product-backend-id");
+  const lookupMsg = document.getElementById("product-lookup-msg");
+  const showLookupMsg = (text) => {
+    lookupMsg.textContent = text;
+    lookupMsg.hidden = !text;
+  };
+  const openResponseViewer = (viewerId) => {
+    if (!viewerId) return false;
+    chrome.tabs.create({ url: chrome.runtime.getURL("viewer.html") + "#" + viewerId });
+    return true;
+  };
+  if (lookupInput) {
+    lookupInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const backendId = lookupInput.value.trim();
+      if (!backendId) return;
+      const debug = e.shiftKey; // Shift+Enter → always show the raw response
+      showLookupMsg("");
+      lookupInput.disabled = true;
+      chrome.tabs.sendMessage(tab.id, { type: "lookupProductByBackendId", backendId }, (resp) => {
+        lookupInput.disabled = false;
+        if (chrome.runtime.lastError || !resp) {
+          showLookupMsg("Couldn't reach the page — reload the EVA tab and retry.");
+          return;
+        }
+        if (debug) {
+          if (openResponseViewer(resp.viewerId)) window.close();
+          else showLookupMsg(resp.error || "No response to show.");
+          return;
+        }
+        if (resp.ok) {
+          chrome.tabs.create({ url: resp.origin + "/pim/products/products-overview/" + resp.productId });
+          window.close();
+        } else {
+          // Surface the error inline and open the raw response so it can be inspected.
+          showLookupMsg(resp.error || "Product not found.");
+          openResponseViewer(resp.viewerId);
+        }
+      });
+    });
+  }
+
+  // -----------------------------------------------------------
   // Build chip: ask the content script for /build.json
   // -----------------------------------------------------------
   chrome.tabs.sendMessage(tab.id, { type: "getBuildJson" }, (resp) => {

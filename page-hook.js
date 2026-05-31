@@ -144,4 +144,37 @@
       });
     } catch (_) {}
   });
+
+  // ---- Request/response bridge ----------------------------------------
+  // Like the replay bridge, but returns the result to the content script,
+  // correlated by reqId. Used for on-demand lookups (e.g. product by
+  // backend ID) where we need the response back.
+  window.addEventListener("message", function (e) {
+    if (e.source !== window) return;
+    var msg = e.data;
+    if (!msg || msg.source !== "EVA_BUDDY_API_REQUEST") return;
+    var reqId = msg.reqId;
+    var reply = function (payload) {
+      payload.source = "EVA_BUDDY_API_RESULT";
+      payload.reqId = reqId;
+      try { window.postMessage(payload, "*"); } catch (_) {}
+    };
+    try {
+      window.fetch(msg.url, {
+        method: msg.method || "POST",
+        credentials: "include",
+        headers: msg.headers || {},
+        body: msg.body,
+      }).then(function (r) {
+        return r.text().then(function (t) {
+          var data = null; try { data = JSON.parse(t); } catch (_) {}
+          reply({ status: r.status, data: data });
+        });
+      }).catch(function (err) {
+        reply({ status: 0, error: String(err) });
+      });
+    } catch (err) {
+      reply({ status: 0, error: String(err) });
+    }
+  });
 })();
