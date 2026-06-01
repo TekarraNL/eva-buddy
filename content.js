@@ -53,6 +53,46 @@
   let captureSeq = 0;
 
   // -----------------------------------------------------------
+  // Source Inspector index: stringified primitive value -> matches.
+  // Powers the hover-trace tooltip that shows which captured JSON
+  // (endpoint + path) a value on the page came from.
+  // -----------------------------------------------------------
+  const SRC_MAX_LEN = 200;          // skip huge blobs (HTML, base64, etc.)
+  const valueIndex = new Map();     // string -> Array<{endpoint, path, captureId}>
+
+  const indexCapture = (cap) => {
+    const walk = (node, path) => {
+      if (node === null || node === undefined) return;
+      const t = typeof node;
+      if (t === "object") {
+        if (Array.isArray(node)) {
+          for (let i = 0; i < node.length; i++) {
+            walk(node[i], (path || "") + "[" + i + "]");
+          }
+        } else {
+          for (const k of Object.keys(node)) {
+            walk(node[k], path ? path + "." + k : k);
+          }
+        }
+        return;
+      }
+      // primitive: number / string / bool
+      const s = String(node);
+      if (s.length > SRC_MAX_LEN) return;
+      if (!s.trim()) return;
+      let list = valueIndex.get(s);
+      if (!list) { list = []; valueIndex.set(s, list); }
+      list.push({ endpoint: cap.endpoint, path: path || "", captureId: cap.id });
+    };
+    walk(cap.data, "");
+  };
+
+  const rebuildValueIndex = () => {
+    valueIndex.clear();
+    for (const c of captures) indexCapture(c);
+  };
+
+  // -----------------------------------------------------------
   // Captured-responses dropdown (anchored under the bar lip)
   // -----------------------------------------------------------
   const dropdownIsOpen = () => !!document.getElementById(BAR_DROPDOWN_ID);
@@ -277,7 +317,14 @@
       timestamp: msg.timestamp,
       data: msg.data,
     });
-    if (captures.length > MAX_CAPTURES) captures.length = MAX_CAPTURES;
+    // Index this capture for the Source Inspector hover-trace.
+    indexCapture(captures[0]);
+    if (captures.length > MAX_CAPTURES) {
+      captures.length = MAX_CAPTURES;
+      // Something fell out of the rolling buffer — rebuild the index so
+      // stale entries don't linger.
+      rebuildValueIndex();
+    }
     if (dropdownIsOpen()) renderDropdown();
 
     // Update product index from any product-shaped objects in the response
@@ -515,6 +562,169 @@
     captureOrderList();
     renderOrderNav();
   };
+
+  // -----------------------------------------------------------
+  // Source Inspector hover-trace tooltip
+  // After a short idle hover on a leaf text node, look the value up
+  // in valueIndex and show every captured (endpoint, path) it matches.
+  // -----------------------------------------------------------
+  const SOURCE_TIP_ID = "eva-source-tip";
+  const SOURCE_HOVER_DELAY = 350; // ms idle before tooltip shows
+  let sourceTipEl = null;
+  let sourceTimer = null;
+  let sourceShownEl = null;
+  let sourcePinned = false;       // Shift-locks the tooltip (interactive, scrollable)
+  let lastSrcX = 0, lastSrcY = 0;
+
+  const ensureSourceTip = () => {
+    if (sourceTipEl && document.body.contains(sourceTipEl)) return sourceTipEl;
+    sourceTipEl = document.createElement("div");
+    sourceTipEl.id = SOURCE_TIP_ID;
+    sourceTipEl.style.display = "none";
+    document.body.appendChild(sourceTipEl);
+    return sourceTipEl;
+  };
+  const hideSourceTip = () => {
+    if (sourceTipEl) {
+      sourceTipEl.style.display = "none";
+      sourceTipEl.classList.remove("eva-src-pinned");
+    }
+    sourceShownEl = null;
+    sourcePinned = false;
+  };
+
+  const pinSourceTip = () => {
+    if (sourcePinned || !sourceShownEl || !sourceTipEl) return;
+    sourcePinned = true;
+    sourceTipEl.classList.add("eva-src-pinned");
+    const header = sourceTipEl.querySelector(".eva-src-header");
+    if (header) header.textContent = header.dataset.lockedLabel || header.textContent;
+  };
+  const positionSourceTip = (x, y) => {
+    if (!sourceTipEl) return;
+    const PAD = 14;
+    const r = sourceTipEl.getBoundingClientRect();
+    const w = r.width || 340;
+    const h = r.height || 80;
+    let nx = x + PAD, ny = y + PAD;
+    if (nx + w > window.innerWidth - 4) nx = x - w - PAD;
+    if (ny + h > window.innerHeight - 4) ny = y - h - PAD;
+    sourceTipEl.style.left = Math.max(4, nx) + "px";
+    sourceTipEl.style.top = Math.max(4, ny) + "px";
+  };
+
+  // Should we even consider this element a hover-trace target?
+  const isOwnUi = (el) => {
+    let n = el;
+    while (n && n !== document.body) {
+      if (n.id && /^eva-/.test(n.id)) return true;
+      n = n.parentElement;
+    }
+    return false;
+  };
+  const isInteractiveLeaf = (el) => {
+    if (!el || !el.tagName) return false;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select" || tag === "button") return true;
+    return false;
+  };
+  const leafText = (el) => {
+    // Strict leaf: element has no element children, only text.
+    if (!el || el.children.length > 0) return null;
+    const t = (el.textContent || "").trim();
+    if (!t || t.length > SRC_MAX_LEN) return null;
+    return t;
+  };
+
+  const tipsAlreadyShown = () =>
+    (tipEl && tipEl.style.display !== "none") ||
+    (orderTipEl && orderTipEl.style.display !== "none");
+
+  const showSourceTip = (target, x, y) => {
+    if (!target) return;
+    if (isOwnUi(target) || isInteractiveLeaf(target)) return;
+    if (tipsAlreadyShown()) return;
+    const text = leafText(target);
+    if (!text) return;
+    const matches = valueIndex.get(text);
+    if (!matches || matches.length === 0) return;
+    // Dedupe by endpoint+path (collapse repeat captures of the same call).
+    const seen = new Map();
+    for (const m of matches) {
+      const key = m.endpoint + "|" + m.path;
+      if (!seen.has(key)) seen.set(key, m);
+    }
+    const unique = Array.from(seen.values());
+    if (unique.length === 0) return;
+    const safe = (s) => String(s).replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
+    const rowsHtml = unique.map((m) =>
+      '<div class="eva-src-row">' +
+        '<span class="eva-src-ep">' + safe(m.endpoint) + '</span>' +
+        '<span class="eva-src-sep"> &rsaquo; </span>' +
+        '<span class="eva-src-path">' + safe(m.path || "(root)") + '</span>' +
+      '</div>'
+    ).join("");
+    const noun = unique.length === 1 ? "source" : "sources";
+    const previewLabel = unique.length + " " + noun + " · Shift to lock";
+    const lockedLabel  = unique.length + " " + noun + " · Locked (Esc to close)";
+    const headerHtml =
+      '<div class="eva-src-header" data-locked-label="' + safe(lockedLabel) + '">' +
+        safe(previewLabel) +
+      '</div>';
+    const tip = ensureSourceTip();
+    tip.innerHTML = headerHtml + rowsHtml;
+    tip.style.display = "block";
+    tip.scrollTop = 0;
+    positionSourceTip(x, y);
+    sourceShownEl = target;
+  };
+
+  // Listeners — separate from the QR/order tip handlers so the two
+  // concerns stay independent.
+  document.addEventListener("mouseover", (event) => {
+    if (sourcePinned) return; // locked tooltip ignores new hovers
+    if (sourceTimer) { clearTimeout(sourceTimer); sourceTimer = null; }
+    if (sourceShownEl && sourceShownEl !== event.target) hideSourceTip();
+    if (isOwnUi(event.target) || isInteractiveLeaf(event.target)) return;
+    const target = event.target;
+    sourceTimer = setTimeout(() => {
+      sourceTimer = null;
+      showSourceTip(target, lastSrcX, lastSrcY);
+    }, SOURCE_HOVER_DELAY);
+  }, true);
+  document.addEventListener("mousemove", (event) => {
+    lastSrcX = event.clientX;
+    lastSrcY = event.clientY;
+    if (sourcePinned) return; // pinned tooltip stays put
+    if (sourceShownEl) positionSourceTip(event.clientX, event.clientY);
+  }, true);
+  document.addEventListener("mouseout", (event) => {
+    if (sourcePinned) return;
+    if (sourceTimer) { clearTimeout(sourceTimer); sourceTimer = null; }
+    const to = event.relatedTarget;
+    if (sourceShownEl && (!to || !sourceShownEl.contains(to))) hideSourceTip();
+  }, true);
+  window.addEventListener("scroll", () => {
+    if (sourcePinned) return;
+    if (sourceTimer) { clearTimeout(sourceTimer); sourceTimer = null; }
+    hideSourceTip();
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && sourcePinned) {
+      hideSourceTip();
+      return;
+    }
+    if (event.key === "Shift" && !event.repeat && sourceShownEl && !sourcePinned) {
+      pinSourceTip();
+    }
+  }, true);
+  document.addEventListener("mousedown", (event) => {
+    if (!sourcePinned) return;
+    if (sourceTipEl && sourceTipEl.contains(event.target)) return;
+    hideSourceTip();
+  }, true);
 
   // -----------------------------------------------------------
   // Mouse handlers — drive both hover-QR and order hover preview
@@ -1109,14 +1319,30 @@
   // -----------------------------------------------------------
   // Popup → content-script bridge
   // -----------------------------------------------------------
+
+  // Cache /build.json so subsequent popup opens are instant and we're not
+  // racing the popup's open against a cold fetch.
+  let buildJsonCache = null;
+  let buildJsonPromise = null;
+  const ensureBuildJson = () => {
+    if (buildJsonCache) return Promise.resolve(buildJsonCache);
+    if (buildJsonPromise) return buildJsonPromise;
+    buildJsonPromise = fetch("/build.json", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { buildJsonCache = data; return data; })
+      .catch(() => null);
+    return buildJsonPromise;
+  };
+  // Prefetch on bootstrap so the cache is warm before the user opens the popup.
+  try { ensureBuildJson(); } catch (_) {}
+
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (!msg) return;
 
       // Fetch /build.json with the page session (for the popup version chip).
       if (msg.type === "getBuildJson") {
-        fetch("/build.json", { credentials: "same-origin" })
-          .then((r) => (r.ok ? r.json() : null))
+        ensureBuildJson()
           .then((data) => sendResponse({ ok: true, data }))
           .catch((err) => sendResponse({ ok: false, error: String(err) }));
         return true;

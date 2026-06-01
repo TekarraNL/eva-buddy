@@ -14,6 +14,19 @@
   let dark = false;
   try { dark = localStorage.getItem(THEME_KEY) === "dark"; } catch (_) {}
   apply(dark);
+  // Sync with the shared EVA dark-mode preference. localStorage gave us an
+  // instant paint with no flash; chrome.storage.local is the authoritative
+  // setting, so if it drifted while the popup was closed, correct now.
+  try {
+    chrome.storage.local.get(SHARED_KEY).then((got) => {
+      if (!got || !(SHARED_KEY in got)) return;
+      const sharedDark = !!got[SHARED_KEY];
+      if (sharedDark === dark) return;
+      dark = sharedDark;
+      apply(dark);
+      try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch (_) {}
+    });
+  } catch (_) {}
   if (toggle) {
     toggle.addEventListener("click", () => {
       dark = !document.body.classList.contains("eva-dark");
@@ -33,9 +46,8 @@
   };
 
   const content      = document.getElementById("content");
-  const qrFrame      = document.getElementById("qr-frame");
   const qrEl         = document.getElementById("qr");
-  const titleEnvEl   = document.getElementById("qr-title-env");
+  const envNameEl    = document.getElementById("env-name");
   const switcherEl   = document.getElementById("env-switcher");
   const jumperEl     = document.getElementById("page-jump");
   const beyondBtnEl  = document.getElementById("beyond-toggle");
@@ -80,9 +92,12 @@
     // EVA's scanner expects the QR payload to be `CONFIGURE:EVA:<percent-encoded-url>`
     // so it recognizes it as an environment-config QR and parses the URL cleanly.
     const qrPayload = `CONFIGURE:EVA:${encodeURIComponent(apiUrl)}`;
-    content.style.setProperty("--env-color", color);
-    qrEl.innerHTML = window.EvaQr.toSvg(qrPayload, { ecc: 1, border: 2 });
-    titleEnvEl.textContent = label;
+    // The env color drives the header badge dot + label via a CSS variable.
+    document.body.style.setProperty("--env-color", color);
+    // Render the QR in the env color (the colored modules carry the
+    // env identity, so we no longer need a colored frame around it).
+    qrEl.innerHTML = window.EvaQr.toSvg(qrPayload, { ecc: 1, border: 2, dark: color });
+    if (envNameEl) envNameEl.textContent = label;
     switcherEl.querySelectorAll("button[data-env]").forEach((b) => {
       b.classList.toggle("active", b.dataset.env === env);
     });

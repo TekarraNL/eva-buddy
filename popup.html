@@ -5,37 +5,49 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <button id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
-    <div id="content" hidden>
-      <div id="qr-title">
-        API endpoint URL
-        <span id="qr-title-env"></span>
+    <header class="popup-header">
+      <div class="env-badge">
+        <span class="env-dot" aria-hidden="true"></span>
+        <span class="env-name" id="env-name"></span>
       </div>
-      <div id="qr-frame">
-        <div id="qr"></div>
+      <div class="header-utils">
+        <span id="build-chip" hidden></span>
+        <button id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
       </div>
-      <div id="env-switcher">
-        <button data-env="test" type="button" aria-label="Test">🟢</button>
-        <button data-env="acc"  type="button" aria-label="Acceptance">🟠</button>
-        <button data-env="prod" type="button" aria-label="Production">🔴</button>
-      </div>
-      <div id="page-jump">
-        <div class="section-label">Open page in</div>
-        <div class="jump-row">
-          <button data-jump-env="test" type="button" aria-label="Open in Test">🟢</button>
-          <button data-jump-env="acc"  type="button" aria-label="Open in Acceptance">🟠</button>
-          <button data-jump-env="prod" type="button" aria-label="Open in Production">🔴</button>
-          <button id="beyond-toggle" type="button" aria-label="Toggle Beyond">🚀</button>
+    </header>
+    <main id="content" hidden>
+      <section class="qr-section">
+        <div class="qr-card">
+          <div id="qr"></div>
         </div>
-      </div>
-      <div id="product-lookup">
+        <div class="qr-caption">API endpoint URL</div>
+        <div id="env-switcher" class="env-dots">
+          <button data-env="test" type="button" aria-label="Test">🟢</button>
+          <button data-env="acc"  type="button" aria-label="Acceptance">🟠</button>
+          <button data-env="prod" type="button" aria-label="Production">🔴</button>
+        </div>
+      </section>
+      <section class="popup-section">
+        <div class="section-label">Open this page in</div>
+        <div id="page-jump" class="jump-row">
+          <div class="jump-circles">
+            <button data-jump-env="test" type="button" aria-label="Open in Test">🟢</button>
+            <button data-jump-env="acc"  type="button" aria-label="Open in Acceptance">🟠</button>
+            <button data-jump-env="prod" type="button" aria-label="Open in Production">🔴</button>
+          </div>
+          <div class="jump-extras">
+            <span class="jump-divider" aria-hidden="true"></span>
+            <button id="beyond-toggle" type="button" aria-label="Toggle Beyond">🚀</button>
+          </div>
+        </div>
+      </section>
+      <section class="popup-section">
         <div class="section-label">Find product by Backend ID</div>
         <input id="product-backend-id" type="text" inputmode="numeric"
                autocomplete="off" placeholder="Backend ID + Enter" />
         <div id="product-lookup-msg" hidden></div>
-      </div>
-      <div id="build-chip" hidden></div>
-    </div>
+      </section>
+    </main>
     <div id="not-eva" hidden>
       Open a tab on an EVA environment to see its API QR code.
     </div>

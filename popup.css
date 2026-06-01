@@ -5,18 +5,64 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #fafafa;
+  background: #f9fafb;
   color: #111;
-  width: 260px;
+  width: 280px;
   position: relative;
   transition: background-color 0.18s ease, color 0.18s ease;
 }
 
+/* -----------------------------------------------------------
+   Header strip — env badge on the left, build chip + theme
+   toggle on the right. Always visible, even on non-EVA tabs.
+   ----------------------------------------------------------- */
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.env-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.env-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--env-color, #9ca3af);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  transition: background-color 0.18s ease;
+}
+
+.env-name {
+  text-transform: uppercase;
+  color: var(--env-color, #6b7280);
+  transition: color 0.18s ease;
+}
+
+.header-utils {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#build-chip {
+  font-size: 10px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+}
+
 #theme-toggle {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  z-index: 5;
   background: transparent;
   border: none;
   font-size: 13px;
@@ -24,7 +70,7 @@ body {
   padding: 4px;
   border-radius: 50%;
   cursor: pointer;
-  opacity: 0.55;
+  opacity: 0.6;
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
@@ -33,37 +79,30 @@ body {
   transform: scale(1.15);
 }
 
-#content,
-#not-eva {
-  padding: 16px;
+/* -----------------------------------------------------------
+   Content
+   ----------------------------------------------------------- */
+#content {
+  padding: 14px 12px 16px;
 }
 
-#qr-title {
-  text-align: center;
-  font-size: 12px;
-  color: #555;
-  margin-bottom: 10px;
-  line-height: 1.3;
+/* QR section: hero card with caption + env switcher dots */
+.qr-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
-#qr-title-env {
-  display: block;
-  margin-top: 2px;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--env-color, #555);
-  transition: color 0.18s ease;
-}
-
-#qr-frame {
+.qr-card {
   background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
-  border: 4px solid var(--env-color, #999999);
-  padding: 14px;
+  padding: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   transition: border-color 0.18s ease;
 }
 
@@ -74,113 +113,122 @@ body {
   display: block;
 }
 
-#env-switcher {
+.qr-caption {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Shared dot row — used both under the QR (env switcher) and inside the
+   jump row, so the colored circles line up vertically. */
+.env-dots,
+.jump-circles {
   display: flex;
   justify-content: center;
   gap: 18px;
-  margin-top: 14px;
+  margin-top: 2px;
 }
 
-#env-switcher button {
+.env-dots button,
+.jump-circles button {
   background: transparent;
   border: none;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
-  padding: 6px;
+  padding: 4px;
   border-radius: 50%;
   cursor: pointer;
-  transition: transform 0.15s ease, background-color 0.15s ease;
+  transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
 }
 
-#env-switcher button:hover {
-  transform: scale(1.2);
-}
-
-#env-switcher button.active {
-  background: rgba(0, 0, 0, 0.08);
+.env-dots button:hover,
+.jump-circles button:hover {
   transform: scale(1.15);
 }
 
-#not-eva {
-  text-align: center;
-  font-size: 13px;
-  color: #555;
-  line-height: 1.4;
+.env-dots button.active {
+  background: rgba(0, 0, 0, 0.08);
+  transform: scale(1.08);
 }
 
-#page-jump {
+.jump-circles button.current {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.jump-circles button.current:hover {
+  transform: none;
+}
+
+/* -----------------------------------------------------------
+   Sections under the QR — "Open this page in" + lookup.
+   ----------------------------------------------------------- */
+.popup-section {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .section-label {
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: #777;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
   margin-bottom: 8px;
 }
 
-#page-jump .jump-row {
-  display: flex;
-  justify-content: center;
-  gap: 14px;
+/* Jump row layout — the three env circles stay centered (so they line up
+   vertically with the QR-section env dots), and the divider + rocket float
+   on the right via absolute positioning so they don't push the cluster off. */
+.jump-row {
+  position: relative;
 }
 
-#page-jump .jump-row button {
+.jump-extras {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.jump-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+#beyond-toggle {
   background: transparent;
   border: none;
   font-size: 22px;
   line-height: 1;
-  padding: 6px;
+  padding: 4px;
   border-radius: 50%;
   cursor: pointer;
-  transition: transform 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
-}
-
-#page-jump .jump-row button:hover {
-  transform: scale(1.18);
-}
-
-#page-jump .jump-row button.current {
-  opacity: 0.35;
-  cursor: default;
-}
-
-#page-jump .jump-row button.current:hover {
-  transform: none;
-}
-
-#beyond-toggle {
-  margin-left: 4px;
   filter: grayscale(1);
   opacity: 0.4;
-  border: 2px solid transparent;
-  transition: filter 0.15s ease, opacity 0.15s ease, border-color 0.15s ease,
+  transition: filter 0.15s ease, opacity 0.15s ease,
               transform 0.15s ease, background-color 0.15s ease;
+}
+
+#beyond-toggle:hover {
+  transform: scale(1.15);
 }
 
 #beyond-toggle.beyond-on {
   filter: none;
   opacity: 1;
-  border-color: rgba(0, 0, 0, 0.5);
 }
 
-#product-lookup {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-}
-
+/* Lookup section */
 #product-backend-id {
   width: 100%;
-  margin-top: 2px;
   padding: 7px 10px;
   font: inherit;
   font-size: 13px;
-  text-align: center;
   border: 1px solid rgba(0, 0, 0, 0.18);
   border-radius: 6px;
   outline: none;
@@ -199,23 +247,65 @@ body {
 
 #product-lookup-msg {
   margin-top: 6px;
-  text-align: center;
   font-size: 11px;
   color: #c0392b;
   line-height: 1.3;
 }
 
-#build-chip {
-  margin-top: 10px;
+/* Not-EVA placeholder */
+#not-eva {
+  padding: 18px 16px;
   text-align: center;
-  font-size: 10px;
-  color: #999;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.3px;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.4;
 }
 
-body.eva-dark #product-lookup {
+/* -----------------------------------------------------------
+   Dark mode — manual toggle adds .eva-dark to <body>.
+   The QR card stays light on purpose so the code scans cleanly.
+   ----------------------------------------------------------- */
+body.eva-dark {
+  background: #1c1c1e;
+  color: #e5e5e7;
+}
+
+body.eva-dark .popup-header {
+  background: #232325;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+body.eva-dark .env-badge {
+  color: #e5e5e7;
+}
+
+body.eva-dark .env-dot {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+body.eva-dark .qr-card {
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+body.eva-dark .qr-caption {
+  color: #98989d;
+}
+
+body.eva-dark .env-dots button.active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+body.eva-dark .popup-section {
   border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+body.eva-dark .section-label {
+  color: #a1a1a6;
+}
+
+body.eva-dark .jump-divider {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 body.eva-dark #product-backend-id {
@@ -224,44 +314,19 @@ body.eva-dark #product-backend-id {
   color: #e5e5e7;
 }
 
+body.eva-dark #product-backend-id:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
 body.eva-dark #product-lookup-msg {
   color: #ff6b5e;
 }
 
-/* -----------------------------------------------------------
-   Dark mode (manual toggle adds .eva-dark to <body>)
-   The QR frame stays white on purpose — QR codes need a light
-   background to scan reliably.
-   ----------------------------------------------------------- */
-body.eva-dark {
-  background: #1c1c1e;
-  color: #e5e5e7;
-}
-
-body.eva-dark #qr-title {
-  color: #98989d;
-}
-
-body.eva-dark #env-switcher button.active {
-  background: rgba(255, 255, 255, 0.14);
+body.eva-dark #build-chip {
+  color: #a1a1a6;
 }
 
 body.eva-dark #not-eva {
   color: #98989d;
-}
-
-body.eva-dark #page-jump {
-  border-top-color: rgba(255, 255, 255, 0.12);
-}
-
-body.eva-dark .section-label {
-  color: #8e8e93;
-}
-
-body.eva-dark #beyond-toggle.beyond-on {
-  border-color: rgba(255, 255, 255, 0.6);
-}
-
-body.eva-dark #build-chip {
-  color: #6e6e73;
 }
