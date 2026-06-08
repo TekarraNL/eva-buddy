@@ -104,6 +104,65 @@ main {
   padding: 6px 16px 24px;
 }
 
+/* When the request panel is shown, switch to a two-column grid. On
+   narrower screens the columns stack so each panel keeps breathing room. */
+main#content.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  main#content.split {
+    grid-template-columns: 1fr;
+  }
+}
+
+#request-panel,
+#response-panel {
+  min-width: 0;
+}
+
+.panel-title {
+  display: none;
+  font-size: 11px;
+  margin: 6px 0 6px 0;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #555;
+}
+
+main#content.split .panel-title {
+  display: block;
+}
+
+.subhead {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #6b7280;
+  margin: 12px 0 4px 0;
+}
+
+.subhead:first-of-type {
+  margin-top: 4px;
+}
+
+.empty-state.mini {
+  padding: 14px;
+  font-size: 11px;
+  background: #fff;
+  border: 1px dashed rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+}
+
+#toggle-request[hidden] {
+  display: none;
+}
+
 table.kv {
   border-collapse: collapse;
   width: 100%;

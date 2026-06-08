@@ -1,13 +1,18 @@
 (async () => {
-  const headerEl    = document.getElementById("header");
-  const endpointEl  = document.getElementById("endpoint");
-  const envPillEl   = document.getElementById("env-pill");
-  const urlEl       = document.getElementById("url");
-  const whenEl      = document.getElementById("when");
-  const rowCountEl  = document.getElementById("row-count");
-  const filterEl    = document.getElementById("filter");
-  const copyAllEl   = document.getElementById("copy-all");
-  const contentEl   = document.getElementById("content");
+  const headerEl         = document.getElementById("header");
+  const endpointEl       = document.getElementById("endpoint");
+  const envPillEl        = document.getElementById("env-pill");
+  const urlEl            = document.getElementById("url");
+  const whenEl           = document.getElementById("when");
+  const rowCountEl       = document.getElementById("row-count");
+  const filterEl         = document.getElementById("filter");
+  const copyAllEl        = document.getElementById("copy-all");
+  const toggleRequestEl  = document.getElementById("toggle-request");
+  const contentMainEl    = document.getElementById("content");
+  const requestPanelEl   = document.getElementById("request-panel");
+  const requestHeadersEl = document.getElementById("request-headers");
+  const requestPayloadEl = document.getElementById("request-payload");
+  const responseBodyEl   = document.getElementById("response-body");
 
   const id = location.hash.replace(/^#/, "");
   if (!id) {
@@ -38,7 +43,7 @@
   chrome.storage.local.remove(id).catch(() => {});
 
   // -----------------------------------------------------------
-  // Render header
+  // Header
   // -----------------------------------------------------------
   document.title = stored.endpoint + " · EVA response";
   endpointEl.textContent = stored.endpoint || "(unknown endpoint)";
@@ -55,27 +60,102 @@
   whenEl.textContent = formatTimestamp(stored.timestamp);
 
   // -----------------------------------------------------------
-  // Flatten JSON to path/value rows
+  // Build three row sets: response, request payload, request headers
   // -----------------------------------------------------------
-  const rows = [];
-  flatten(stored.data, "", null, rows);
-  rows.forEach((r, i) => (r.idx = i));
-  rowCountEl.textContent = rows.length + " value" + (rows.length === 1 ? "" : "s");
+  const responseRows = [];
+  flatten(stored.data, "", null, responseRows);
+  responseRows.forEach((r, i) => (r.idx = i));
+  rowCountEl.textContent =
+    responseRows.length + " value" + (responseRows.length === 1 ? "" : "s");
 
-  if (rows.length === 0) {
+  // Parse the captured request payload, if any. EVA's SDK sends JSON, but
+  // fall back to treating the body as a raw string if it doesn't parse.
+  let payloadParsed = null;
+  const rawRequestBody = stored.requestBody;
+  if (rawRequestBody != null) {
+    if (typeof rawRequestBody === "string") {
+      try { payloadParsed = JSON.parse(rawRequestBody); }
+      catch (_) { payloadParsed = rawRequestBody; }
+    } else {
+      payloadParsed = rawRequestBody;
+    }
+  }
+  const payloadRows = [];
+  if (payloadParsed && typeof payloadParsed === "object") {
+    flatten(payloadParsed, "", null, payloadRows);
+  } else if (payloadParsed != null) {
+    payloadRows.push({
+      path: "",
+      value: payloadParsed,
+      kind: typeof payloadParsed,
+      display: String(payloadParsed),
+      parent: null,
+    });
+  }
+  payloadRows.forEach((r, i) => (r.idx = i));
+
+  const headerRows = [];
+  const hdrs = stored.requestHeaders || {};
+  Object.keys(hdrs).sort().forEach((k, i) => {
+    headerRows.push({
+      path: k,
+      value: hdrs[k],
+      display: String(hdrs[k] == null ? "" : hdrs[k]),
+      kind: "string",
+      parent: null,
+      idx: i,
+    });
+  });
+
+  // Show toggle only when we actually captured something for the request.
+  const hasRequest = headerRows.length > 0 || payloadRows.length > 0;
+  toggleRequestEl.hidden = !hasRequest;
+
+  // -----------------------------------------------------------
+  // Render
+  // -----------------------------------------------------------
+  if (responseRows.length === 0) {
     headerEl.hidden = false;
-    contentEl.innerHTML = '<div class="empty-state">Response had no leaf values.</div>';
-    return;
+    responseBodyEl.innerHTML = '<div class="empty-state">Response had no leaf values.</div>';
+  } else {
+    headerEl.hidden = false;
+    renderAll();
   }
 
-  headerEl.hidden = false;
-  renderTable(rows, "");
+  function renderAll() {
+    const f = filterEl.value;
+    renderRowsInto(responseRows, f, responseBodyEl, { actions: true });
+    renderRowsInto(headerRows,  f, requestHeadersEl, {
+      actions: false,
+      emptyMsg: hdrs && Object.keys(hdrs).length ? "No headers match the filter." : "No headers captured.",
+    });
+    renderRowsInto(payloadRows, f, requestPayloadEl, {
+      actions: false,
+      emptyMsg: payloadRows.length ? "No payload rows match the filter." : "No payload.",
+    });
+  }
 
-  filterEl.addEventListener("input", () => renderTable(rows, filterEl.value));
-  copyAllEl.addEventListener("click", () => copyVisibleRows(rows, filterEl.value));
+  // -----------------------------------------------------------
+  // Event wiring
+  // -----------------------------------------------------------
+  filterEl.addEventListener("input", renderAll);
 
-  // Single delegated click handler for the table — survives re-renders.
-  contentEl.addEventListener("click", (e) => {
+  copyAllEl.addEventListener("click", () => copyVisibleRows(responseRows, filterEl.value));
+
+  toggleRequestEl.addEventListener("click", () => {
+    const isShown = !requestPanelEl.hidden;
+    requestPanelEl.hidden = isShown;
+    contentMainEl.classList.toggle("split", !isShown);
+    toggleRequestEl.textContent = isShown ? "Show request" : "Hide request";
+    toggleRequestEl.title = isShown
+      ? "Show request alongside response"
+      : "Hide the request panel";
+  });
+
+  // Single delegated click handler — covers response, headers, and payload
+  // tables. The {…} and { } action buttons are only rendered for the
+  // response panel, so they target stored.data.
+  contentMainEl.addEventListener("click", (e) => {
     const td = e.target.closest("td[data-copy]");
     if (td) {
       const text = td.getAttribute("data-copy");
@@ -92,7 +172,7 @@
       }
       if (act === "raw") {
         const idx = Number(btn.getAttribute("data-row-idx"));
-        const row = rows[idx];
+        const row = responseRows[idx];
         if (!row) return;
         const target = row.parent != null ? row.parent : row.value;
         copyToClipboard(JSON.stringify(target, null, 2), "Copied parent");
@@ -134,7 +214,13 @@
     }
   }
 
-  function renderTable(rows, filter) {
+  function renderRowsInto(rows, filter, targetEl, opts) {
+    opts = opts || {};
+    if (rows.length === 0) {
+      targetEl.innerHTML =
+        '<div class="empty-state mini">' + safe(opts.emptyMsg || "No rows.") + "</div>";
+      return;
+    }
     const f = (filter || "").trim().toLowerCase();
     const visible = f
       ? rows.filter((r) =>
@@ -144,27 +230,28 @@
       : rows;
 
     if (visible.length === 0) {
-      contentEl.innerHTML = '<div class="empty-state">No rows match the filter.</div>';
+      targetEl.innerHTML = '<div class="empty-state mini">No rows match the filter.</div>';
       return;
     }
 
-    const safe = (s) => String(s).replace(/[&<>"']/g, (ch) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-    }[ch]));
-
+    const showActions = !!opts.actions;
     const trs = visible.map((r) => {
+      const actionsCell = showActions
+        ? `<td class="actions">
+             <button type="button" data-act="raw" data-row-idx="${r.idx}" title="Copy parent object as JSON">{ }</button>
+             <button type="button" data-act="outer" title="Copy full response as JSON">{…}</button>
+           </td>`
+        : "";
       return `<tr>
         <td class="path" data-copy="${safe(r.path)}">${safe(r.path) || "<em>(root)</em>"}</td>
         <td class="value v-${r.kind}" data-copy="${safe(r.display)}">${safe(r.display)}</td>
-        <td class="actions">
-          <button type="button" data-act="raw" data-row-idx="${r.idx}" title="Copy parent object as JSON">{ }</button>
-          <button type="button" data-act="outer" title="Copy full response as JSON">{…}</button>
-        </td>
+        ${actionsCell}
       </tr>`;
     }).join("");
 
-    contentEl.innerHTML = `<table class="kv">
-      <thead><tr><th>Path</th><th>Value</th><th class="actions-th"></th></tr></thead>
+    const actionsTh = showActions ? '<th class="actions-th"></th>' : "";
+    targetEl.innerHTML = `<table class="kv">
+      <thead><tr><th>Path</th><th>Value</th>${actionsTh}</tr></thead>
       <tbody>${trs}</tbody>
     </table>`;
   }
@@ -213,6 +300,12 @@
 
   function showError(message) {
     headerEl.hidden = true;
-    contentEl.innerHTML = '<div class="error-state">' + message + '</div>';
+    contentMainEl.innerHTML = '<div class="error-state">' + safe(message) + "</div>";
+  }
+
+  function safe(s) {
+    return String(s).replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
   }
 })();

@@ -483,3 +483,359 @@ html.eva-buddy-dark #root [role="separator"],
 html.eva-buddy-dark #root hr {
   border-color: #8f8f8f !important;
 }
+
+/* -----------------------------------------------------------
+   EVA Buddy filter section — collapsible card injected at the
+   top of EVA's right-hand filter panel on /orders/orders.
+   ----------------------------------------------------------- */
+#eva-buddy-filter-section .eb-filter-card {
+  border-radius: 0.5rem;
+  background: rgba(124, 58, 237, 0.06); /* subtle purple tint to distinguish from EVA cards */
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  overflow: hidden;
+}
+
+#eva-buddy-filter-section .eb-filter-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  text-align: left;
+}
+
+#eva-buddy-filter-section .eb-filter-header:hover {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+#eva-buddy-filter-section .eb-filter-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(124, 58, 237, 0.18);
+  color: #6d28d9;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#eva-buddy-filter-section .eb-filter-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #6d28d9;
+  letter-spacing: 0.1px;
+}
+
+#eva-buddy-filter-section .eb-filter-body {
+  padding: 0 16px 14px;
+}
+
+#eva-buddy-filter-section .eb-filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#eva-buddy-filter-section .eb-filter-row-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+#eva-buddy-filter-section .eb-filter-row-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+#eva-buddy-filter-section .eb-filter-tristate {
+  display: flex;
+  gap: 0;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+#eva-buddy-filter-section .eb-filter-tristate button {
+  flex: 1;
+  padding: 6px 4px;
+  border: none;
+  background: transparent;
+  font: 600 11.5px/1.2 inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #374151;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+#eva-buddy-filter-section .eb-filter-tristate button:hover {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+#eva-buddy-filter-section .eb-filter-tristate button.eb-active {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(124, 58, 237, 0.3);
+}
+
+/* -----------------------------------------------------------
+   Price-list CSV upload — docked button + modal.
+   ----------------------------------------------------------- */
+/* Match EVA's own icon-button chrome (border-default, transparent bg,
+   p-[0.4375rem]) so we sit cleanly next to the upload button. */
+.eva-price-csv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 0.4375rem;
+  min-width: 1.875rem;
+  height: 1.875rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  box-sizing: border-box;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.eva-price-csv-btn .eva-price-csv-btn-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1;
+}
+
+.eva-price-csv-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.32);
+}
+
+.eva-price-csv-btn:active { transform: scale(0.97); }
+
+#eva-price-csv-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #111;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+#eva-price-csv-modal .eva-csv-card {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+#eva-price-csv-modal .eva-csv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: #f9fafb;
+}
+
+#eva-price-csv-modal .eva-csv-head strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#eva-price-csv-modal .eva-csv-sub {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+#eva-price-csv-modal .eva-csv-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+#eva-price-csv-modal .eva-csv-close:hover { background: rgba(0, 0, 0, 0.05); color: #111; }
+
+#eva-price-csv-modal .eva-csv-body {
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+}
+
+#eva-price-csv-modal .eva-csv-step p { margin: 0 0 10px; }
+
+#eva-price-csv-modal .eva-csv-step code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  background: #f3f4f6;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+#eva-price-csv-modal .eva-csv-hint { color: #6b7280; font-size: 12px; }
+
+#eva-price-csv-modal .eva-csv-file-btn {
+  display: inline-block;
+  padding: 8px 14px;
+  border: 1px dashed #9ca3af;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #fff;
+  font-weight: 500;
+}
+
+#eva-price-csv-modal .eva-csv-file-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+#eva-price-csv-modal .eva-csv-file-btn input[type="file"] {
+  display: none;
+}
+
+#eva-price-csv-modal .eva-csv-preview-summary {
+  font-weight: 500;
+  color: #374151;
+}
+
+#eva-price-csv-modal .eva-csv-preview-wrap {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+#eva-price-csv-modal table.eva-csv-preview {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+#eva-price-csv-modal table.eva-csv-preview th,
+#eva-price-csv-modal table.eva-csv-preview td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
+}
+
+#eva-price-csv-modal table.eva-csv-preview th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #4b5563;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+#eva-price-csv-modal .eva-csv-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+#eva-price-csv-modal .eva-csv-actions button {
+  padding: 6px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 6px;
+  background: #fff;
+  font: 500 13px/1 inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+#eva-price-csv-modal .eva-csv-actions button:hover {
+  background: #f3f4f6;
+}
+
+#eva-price-csv-modal .eva-csv-start,
+#eva-price-csv-modal .eva-csv-close-done {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+#eva-price-csv-modal .eva-csv-start:hover,
+#eva-price-csv-modal .eva-csv-close-done:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+#eva-price-csv-modal .eva-csv-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+#eva-price-csv-modal .eva-csv-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  transition: width 0.15s ease;
+}
+
+#eva-price-csv-modal .eva-csv-progress-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #374151;
+}
+
+#eva-price-csv-modal .eva-csv-errs {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+#eva-price-csv-modal .eva-csv-errs-summary {
+  cursor: pointer;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+#eva-price-csv-modal .eva-csv-errs-list {
+  margin: 8px 0 0;
+  padding-left: 22px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  color: #374151;
+}
+
+#eva-price-csv-modal .eva-csv-done-text {
+  font-size: 14px;
+  font-weight: 600;
+}

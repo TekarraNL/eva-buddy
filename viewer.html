@@ -21,10 +21,23 @@
       </div>
       <div class="controls">
         <input type="search" id="filter" placeholder="Filter by path or value…" autocomplete="off" />
-        <button type="button" id="copy-all" title="Copy all visible rows as TSV">Copy</button>
+        <button type="button" id="toggle-request" hidden title="Show request alongside response">Show request</button>
+        <button type="button" id="copy-all" title="Copy all visible response rows as TSV">Copy response</button>
       </div>
     </header>
-    <main id="content">Loading…</main>
+    <main id="content">
+      <section id="request-panel" hidden>
+        <h2 class="panel-title">Request</h2>
+        <h3 class="subhead">Headers</h3>
+        <div id="request-headers" class="panel-body">Loading…</div>
+        <h3 class="subhead">Payload</h3>
+        <div id="request-payload" class="panel-body">Loading…</div>
+      </section>
+      <section id="response-panel">
+        <h2 class="panel-title">Response</h2>
+        <div id="response-body" class="panel-body">Loading…</div>
+      </section>
+    </main>
     <script src="viewer.js"></script>
   </body>
 </html>

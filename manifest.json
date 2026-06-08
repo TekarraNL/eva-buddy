@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "eva-buddy",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "EVA admin quality-of-life: env color stripe, dark mode, module switcher, hover-QR, JSON/API tools, and order & consumer helpers.",
   "icons": {
     "16": "icon-16.png",

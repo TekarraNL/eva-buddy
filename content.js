@@ -186,6 +186,8 @@
           url: cap.url,
           timestamp: cap.timestamp,
           data: cap.data,
+          requestHeaders: cap.requestHeaders || null,
+          requestBody: cap.requestBody || null,
         },
       });
     } catch (err) {
@@ -316,6 +318,8 @@
       url: msg.url,
       timestamp: msg.timestamp,
       data: msg.data,
+      requestHeaders: msg.requestHeaders || null,
+      requestBody: msg.requestBody || null,
     });
     // Index this capture for the Source Inspector hover-trace.
     indexCapture(captures[0]);
@@ -1288,28 +1292,32 @@
     if (cb) { pendingApiCalls.delete(msg.reqId); cb(msg); }
   });
 
-  const evaApiCall = (endpoint, body, extraHeaders) =>
+  // opts: { async: true } → POSTs to /async-message/<endpoint> instead of /message/<endpoint>
+  //       { timeoutMs: <n> } → override the default 12 s timeout
+  const evaApiCall = (endpoint, body, extraHeaders, opts) =>
     new Promise((resolve) => {
       if (!lastAuthHeaders) { resolve({ status: 0, error: "no-auth" }); return; }
       const reqId = "eva-api-" + (++apiReqSeq);
       const apiBase = "https://api." + location.hostname.replace(/^beyond--/i, "");
+      const path = (opts && opts.async) ? "/async-message/" : "/message/";
       const headers = Object.assign(
         {},
         lastAuthHeaders,
         { "content-type": "application/json" },
         extraHeaders || {}
       );
+      const timeoutMs = (opts && opts.timeoutMs) || 12000;
       const timer = setTimeout(() => {
         if (pendingApiCalls.has(reqId)) {
           pendingApiCalls.delete(reqId);
           resolve({ status: 0, error: "timeout" });
         }
-      }, 12000);
+      }, timeoutMs);
       pendingApiCalls.set(reqId, (res) => { clearTimeout(timer); resolve(res); });
       window.postMessage({
         source: "EVA_BUDDY_API_REQUEST",
         reqId,
-        url: apiBase + "/message/" + endpoint,
+        url: apiBase + path + endpoint,
         method: "POST",
         headers,
         body: JSON.stringify(body),
@@ -1681,4 +1689,662 @@
     }
   }
   setInterval(maybeInjectProductPrices, 1000);
+
+  // -----------------------------------------------------------
+  // Price-list CSV bulk upload.
+  // EVA has a built-in xlsx upload on price-list adjustments but it
+  // chokes on anything more than a few hundred rows. When that button
+  // shows, we dock a "CSV" button next to it; clicking it opens a modal
+  // that streams an arbitrary-size UTF-8 CSV through
+  // CreatePriceListManualInputAdjustment one row at a time, so the
+  // server is never asked to chew a giant payload.
+  // -----------------------------------------------------------
+  const PRICE_CSV_BTN_CLASS = "eva-price-csv-btn";
+  const PRICE_CSV_MODAL_ID = "eva-price-csv-modal";
+  const PRICELIST_PATH_RE = /^\/financials\/price-lists\/(\d+)(\/|$)/i;
+  const ADJUSTMENT_URL_RE = /\/adjustments\/(\d+)/i;
+
+  const isPriceListPage = () => PRICELIST_PATH_RE.test(location.pathname);
+
+  // EVA's upload button is an icon-only button: <svg name="lyra-upload">
+  // <use href=".../icon-defs.svg#upload"> — no text, no aria-label. We match
+  // either the SVG name or the use-href, then walk up to the wrapping button.
+  const findEvaUploadButtons = () => {
+    if (!isPriceListPage()) return [];
+    const matches = new Set();
+    document.querySelectorAll('svg[name="lyra-upload"]').forEach((svg) => {
+      const btn = svg.closest("button");
+      if (btn && !btn.classList.contains(PRICE_CSV_BTN_CLASS)) matches.add(btn);
+    });
+    document.querySelectorAll('use[href*="#upload"], use[xlink\\:href*="#upload"]').forEach((u) => {
+      const btn = u.closest("button");
+      if (btn && !btn.classList.contains(PRICE_CSV_BTN_CLASS)) matches.add(btn);
+    });
+    return Array.from(matches);
+  };
+
+  // From a button, walk up looking for the adjustment id this button belongs to.
+  // EVA renders adjustments as collapsible cards on the price-list page; if the
+  // button lives in such a card, links/inputs near it carry /adjustments/<id>.
+  // Fallback: the current URL when the modal route is active.
+  const findAdjustmentIdForButton = (btn) => {
+    let p = btn;
+    for (let i = 0; i < 12 && p; i++) {
+      const link = p.querySelector && p.querySelector('a[href*="/adjustments/"]');
+      if (link) {
+        const m = link.getAttribute("href").match(ADJUSTMENT_URL_RE);
+        if (m) return m[1];
+      }
+      const inpId = p.id || "";
+      const dataId = (p.dataset && (p.dataset.adjustmentId || p.dataset.id)) || "";
+      if (/^\d{8,}$/.test(dataId)) return dataId;
+      p = p.parentElement;
+    }
+    const m = location.pathname.match(ADJUSTMENT_URL_RE);
+    return m ? m[1] : null;
+  };
+
+  const ensurePriceCsvButtons = () => {
+    // Remove orphans (parent or EVA button gone)
+    document.querySelectorAll("." + PRICE_CSV_BTN_CLASS).forEach((b) => {
+      if (!b.dataset.ebTwinId) return;
+      const twin = document.getElementById(b.dataset.ebTwinId);
+      if (!twin || !document.contains(twin)) b.remove();
+    });
+    const evaButtons = findEvaUploadButtons();
+    evaButtons.forEach((evaBtn) => {
+      // Already paired?
+      const next = evaBtn.nextElementSibling;
+      if (next && next.classList && next.classList.contains(PRICE_CSV_BTN_CLASS)) return;
+      const adjId = findAdjustmentIdForButton(evaBtn);
+      if (!adjId) return;
+      // Stable id so we can find the twin again
+      if (!evaBtn.id) evaBtn.id = "eva-xlsx-" + Math.random().toString(36).slice(2, 8);
+      const ours = document.createElement("button");
+      ours.className = PRICE_CSV_BTN_CLASS;
+      ours.type = "button";
+      ours.title = "EVA Buddy: bulk-upload prices via UTF-8 CSV (one row at a time)";
+      // Same dimensions as EVA's icon button (a small square) so the row
+      // doesn't shift; "CSV" inside is the label.
+      ours.innerHTML = '<span class="eva-price-csv-btn-label">CSV</span>';
+      ours.dataset.ebTwinId = evaBtn.id;
+      ours.dataset.adjId = adjId;
+      ours.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Resolve the target adjustment at click time. Prefer the captured
+        // ListPriceListManualInputAdjustments filter (matches the adjustment
+        // the user has open right now); fall back to the DOM-walked id.
+        const detected = findActiveAdjustmentId() || adjId;
+        openPriceCsvModal(detected);
+      });
+      evaBtn.parentElement.insertBefore(ours, evaBtn.nextSibling);
+    });
+  };
+
+  // -------- CSV parsing --------
+  const parsePriceCsv = (text) => {
+    // Strip UTF-8 BOM
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    // Sniff delimiter on the first physical line — tab beats comma if present
+    const firstLine = text.split(/\r?\n/, 1)[0] || "";
+    const delim = firstLine.includes("\t") && firstLine.split("\t").length > firstLine.split(",").length
+      ? "\t" : ",";
+    const lines = [];
+    let row = [];
+    let field = "";
+    let inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+        else if (c === '"') inQ = false;
+        else field += c;
+      } else {
+        if (c === '"') inQ = true;
+        else if (c === delim) { row.push(field); field = ""; }
+        else if (c === "\r" || c === "\n") {
+          if (c === "\r" && text[i + 1] === "\n") i++;
+          row.push(field); field = "";
+          if (row.length > 1 || row[0] !== "") lines.push(row);
+          row = [];
+        } else field += c;
+      }
+    }
+    if (field !== "" || row.length) { row.push(field); if (row.length > 1 || row[0] !== "") lines.push(row); }
+    if (!lines.length) return { delim, header: [], objects: [] };
+    const header = lines[0].map((h) => h.trim());
+    const objects = lines.slice(1).map((line) => {
+      const o = {};
+      header.forEach((h, i) => (o[h] = (line[i] != null ? String(line[i]).trim() : "")));
+      return o;
+    });
+    return { delim, header, objects };
+  };
+
+  // Case-insensitive column lookup with common aliases
+  const pickCol = (row, candidates) => {
+    const keys = Object.keys(row);
+    for (const cand of candidates) {
+      const k = keys.find((x) => x.toLowerCase() === cand.toLowerCase());
+      if (k && row[k] !== "") return row[k];
+    }
+    return "";
+  };
+
+  // Accept many incoming date formats and normalise to ISO 8601 UTC.
+  // Supports: yyyy-mm-dd, yyyy-mm-ddTHH:MM(:SS)?Z?, yyyy-mm-dd HH:MM(:SS)?,
+  //           dd/mm/yyyy(?: HH:MM(:SS)?)?, dd-mm-yyyy(?: HH:MM(:SS)?)?
+  // Whitespace inside the value is collapsed first so "31-12-9000  00:00:00"
+  // (with the double space some EVA exports produce) parses cleanly.
+  const normaliseDate = (s) => {
+    s = String(s).trim().replace(/\s+/g, " ");
+    if (!s) return null;
+    // Already ISO 8601 with a T separator — pass through
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s;
+    // ISO date only
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s + "T00:00:00Z";
+    const pad = (v, fb) => String(v == null ? (fb || 0) : v).padStart(2, "0");
+    // ISO date + space + time
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2}) (\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+    if (m) {
+      const [, y, mo, d, hh, mm, ss] = m;
+      return y + "-" + pad(mo) + "-" + pad(d) + "T" + pad(hh) + ":" + pad(mm) + ":" + pad(ss) + "Z";
+    }
+    // dd-mm-yyyy or dd/mm/yyyy, optionally followed by HH:MM(:SS)
+    m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?: (\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+    if (m) {
+      const [, d, mo, y, hh, mm, ss] = m;
+      const time = hh != null ? pad(hh) + ":" + pad(mm) + ":" + pad(ss) : "00:00:00";
+      return y + "-" + pad(mo) + "-" + pad(d) + "T" + time + "Z";
+    }
+    return s;
+  };
+
+  // The page itself fires ListPriceListManualInputAdjustments when an
+  // adjustment is expanded, with PriceListAdjustmentID in the request filter.
+  // That's the most reliable source of truth for "which adjustment is this
+  // user currently looking at" — more reliable than walking the DOM. We read
+  // it straight off the latest capture (newest-first ordering).
+  const findActiveAdjustmentId = () => {
+    for (const cap of captures) {
+      if (cap.endpoint !== "ListPriceListManualInputAdjustments") continue;
+      if (!cap.requestBody) continue;
+      let body;
+      try { body = JSON.parse(cap.requestBody); } catch (_) { continue; }
+      const pc = body && body.PageConfig;
+      // EVA's filter object is sometimes "Filter", sometimes "Filters" — try both.
+      const f = pc && (pc.Filter || pc.Filters);
+      const id = f && f.PriceListAdjustmentID;
+      if (id) return String(id);
+    }
+    return null;
+  };
+
+  // Build one CreatePriceListManualInputAdjustment body for a single CSV row.
+  // The CSV's `ID` column is intentionally IGNORED — the adjustment ID comes
+  // from the page's most recent ListPriceListManualInputAdjustments call so
+  // we always target whatever adjustment the user has open.
+  const buildAdjBody = (row, adjId) => {
+    const bid    = pickCol(row, ["BackendID", "Backend ID", "ProductBackendID", "ProductID"]);
+    const price  = pickCol(row, ["Price", "Value"]);
+    const eff    = pickCol(row, ["EffectiveDate", "Effective Date", "StartDate", "From"]);
+    const exp    = pickCol(row, ["ExpireDate", "Expire Date", "EndDate", "Until", "To"]);
+    if (!adjId)            return { error: "No active adjustment detected" };
+    if (!bid)              return { error: "Missing BackendID" };
+    if (price === "")      return { error: "Missing Price" };
+    const valNum = Number(String(price).replace(",", "."));
+    if (!isFinite(valNum)) return { error: 'Price not numeric: "' + price + '"' };
+    const body = {
+      PriceListAdjustmentID: adjId,
+      // ProductID + EVA-IDs-Mode: Hybrid lets us pass the BackendID here and
+      // have EVA resolve it server-side — no per-row GetProductDetail needed.
+      ProductID: bid,
+      Value: valNum,
+    };
+    if (eff) body.EffectiveDate = normaliseDate(eff);
+    if (exp) body.ExpireDate    = normaliseDate(exp);
+    return { body };
+  };
+
+  const escapeHtmlPC = (s) =>
+    String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+
+  const openPriceCsvModal = (defaultAdjId) => {
+    // Close any existing
+    const old = document.getElementById(PRICE_CSV_MODAL_ID);
+    if (old) old.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = PRICE_CSV_MODAL_ID;
+    overlay.innerHTML =
+      '<div class="eva-csv-card">' +
+        '<header class="eva-csv-head">' +
+          '<div>' +
+            '<strong>EVA Buddy · CSV price upload</strong>' +
+            '<span class="eva-csv-sub">Adjustment ' + escapeHtmlPC(defaultAdjId) + '</span>' +
+          '</div>' +
+          '<button type="button" class="eva-csv-close" aria-label="Close">×</button>' +
+        '</header>' +
+        '<div class="eva-csv-body">' +
+          // Pick step
+          '<section class="eva-csv-step step-pick">' +
+            '<p>Pick a UTF-8 CSV. Expected columns: ' +
+              '<code>BackendID</code>, <code>Price</code>, ' +
+              '<code>EffectiveDate</code>, <code>ExpireDate</code> (optional). ' +
+              'Any <code>ID</code> column in the CSV is ignored — EVA Buddy targets the adjustment shown above.' +
+            '</p>' +
+            '<p class="eva-csv-hint">Comma or tab delimited. Decimal comma is fine. Dates as <code>yyyy-mm-dd</code> or <code>dd/mm/yyyy</code>.</p>' +
+            '<label class="eva-csv-file-btn">' +
+              '<input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" />' +
+              'Choose CSV…' +
+            '</label>' +
+          '</section>' +
+          // Preview step
+          '<section class="eva-csv-step step-preview" hidden>' +
+            '<p class="eva-csv-preview-summary"></p>' +
+            '<div class="eva-csv-preview-wrap"><table class="eva-csv-preview"></table></div>' +
+            '<div class="eva-csv-actions">' +
+              '<button type="button" class="eva-csv-pick-again">Pick another file</button>' +
+              '<button type="button" class="eva-csv-start">Start upload</button>' +
+            '</div>' +
+          '</section>' +
+          // Progress step
+          '<section class="eva-csv-step step-progress" hidden>' +
+            '<div class="eva-csv-bar"><div class="eva-csv-bar-fill"></div></div>' +
+            '<p class="eva-csv-progress-text"></p>' +
+            '<div class="eva-csv-actions">' +
+              '<button type="button" class="eva-csv-pause">Pause</button>' +
+              '<button type="button" class="eva-csv-cancel">Cancel</button>' +
+            '</div>' +
+            '<details class="eva-csv-errs" hidden>' +
+              '<summary class="eva-csv-errs-summary"></summary>' +
+              '<ol class="eva-csv-errs-list"></ol>' +
+            '</details>' +
+          '</section>' +
+          // Done step
+          '<section class="eva-csv-step step-done" hidden>' +
+            '<p class="eva-csv-done-text"></p>' +
+            '<details class="eva-csv-errs eva-csv-errs-final" hidden>' +
+              '<summary class="eva-csv-errs-summary"></summary>' +
+              '<ol class="eva-csv-errs-list"></ol>' +
+            '</details>' +
+            '<div class="eva-csv-actions">' +
+              '<button type="button" class="eva-csv-copy-errs" hidden>Copy errors</button>' +
+              '<button type="button" class="eva-csv-close-done">Close</button>' +
+            '</div>' +
+          '</section>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    const $ = (sel) => overlay.querySelector(sel);
+    const $$ = (sel) => overlay.querySelectorAll(sel);
+    const setStep = (name) => {
+      $$(".eva-csv-step").forEach((s) => (s.hidden = true));
+      $(".step-" + name).hidden = false;
+    };
+
+    const state = {
+      defaultAdjId,
+      rows: [],
+      header: [],
+      successCount: 0,
+      errors: [],
+      paused: false,
+      cancelled: false,
+      processedCount: 0,
+    };
+
+    const close = () => overlay.remove();
+    $(".eva-csv-close").addEventListener("click", close);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+
+    $('.eva-csv-file-btn input[type="file"]').addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const { header, objects } = parsePriceCsv(text);
+        state.header = header;
+        state.rows   = objects;
+        $(".eva-csv-preview-summary").textContent =
+          objects.length + " row" + (objects.length === 1 ? "" : "s") +
+          " · columns: " + header.join(", ");
+        const previewRows = objects.slice(0, 5);
+        const table = $(".eva-csv-preview");
+        table.innerHTML =
+          "<thead><tr>" + header.map((h) => "<th>" + escapeHtmlPC(h) + "</th>").join("") + "</tr></thead>" +
+          "<tbody>" +
+            previewRows.map((r) =>
+              "<tr>" + header.map((h) => "<td>" + escapeHtmlPC(r[h] || "") + "</td>").join("") + "</tr>"
+            ).join("") +
+          "</tbody>";
+        setStep("preview");
+      } catch (err) {
+        alert("Couldn't read CSV: " + err);
+      }
+    });
+
+    $(".eva-csv-pick-again").addEventListener("click", () => {
+      $('.eva-csv-file-btn input[type="file"]').value = "";
+      setStep("pick");
+    });
+
+    $(".eva-csv-start").addEventListener("click", () => {
+      setStep("progress");
+      runUpload(state, overlay).catch((err) => {
+        console.error("[eva-buddy] CSV upload crashed:", err);
+        alert("Upload crashed: " + err);
+      });
+    });
+
+    $(".eva-csv-pause").addEventListener("click", (e) => {
+      state.paused = !state.paused;
+      e.currentTarget.textContent = state.paused ? "Resume" : "Pause";
+    });
+    $(".eva-csv-cancel").addEventListener("click", () => { state.cancelled = true; });
+    $(".eva-csv-close-done").addEventListener("click", close);
+
+    $(".eva-csv-copy-errs").addEventListener("click", () => {
+      const tsv = "row\tmessage\tdata\n" + state.errors.map((e) =>
+        e.rowNum + "\t" + (e.msg || "") + "\t" + JSON.stringify(e.data || {})
+      ).join("\n");
+      try { navigator.clipboard.writeText(tsv); } catch (_) {}
+    });
+  };
+
+  const runUpload = async (state, overlay) => {
+    const $ = (sel) => overlay.querySelector(sel);
+    const progText = $(".eva-csv-progress-text");
+    const barFill  = $(".eva-csv-bar-fill");
+    const errsDet  = $(".step-progress .eva-csv-errs");
+    const errsSum  = errsDet.querySelector(".eva-csv-errs-summary");
+    const errsOl   = errsDet.querySelector(".eva-csv-errs-list");
+
+    const total = state.rows.length;
+    const started = Date.now();
+    const renderProgress = () => {
+      const done = state.processedCount;
+      const pct = total ? (done / total) * 100 : 0;
+      barFill.style.width = pct.toFixed(2) + "%";
+      const elapsed = (Date.now() - started) / 1000;
+      const rate = done > 0 ? elapsed / done : 0;
+      const remaining = rate * (total - done);
+      const eta = remaining > 0 ? " · ~" + formatDuration(remaining) + " left" : "";
+      progText.textContent =
+        "Processing " + done + " / " + total +
+        " · " + state.successCount + " ok · " + state.errors.length + " errors" +
+        eta;
+      if (state.errors.length) {
+        errsDet.hidden = false;
+        errsSum.textContent = state.errors.length + " error" + (state.errors.length === 1 ? "" : "s");
+        errsOl.innerHTML = state.errors.slice(-50).map((e) =>
+          "<li><strong>Row " + e.rowNum + "</strong>: " + escapeHtmlPC(e.msg) + "</li>"
+        ).join("");
+      }
+    };
+
+    for (let i = 0; i < total; i++) {
+      if (state.cancelled) break;
+      while (state.paused) {
+        await new Promise((r) => setTimeout(r, 200));
+        if (state.cancelled) break;
+      }
+      if (state.cancelled) break;
+
+      const row = state.rows[i];
+      // Re-resolve adjustment ID per row: the user may have expanded a
+      // different adjustment between picking the file and starting. Snapshot
+      // is state.defaultAdjId; latest signal wins if present.
+      const targetAdjId = findActiveAdjustmentId() || state.defaultAdjId;
+      const built = buildAdjBody(row, targetAdjId);
+      if (built.error) {
+        state.errors.push({ rowNum: i + 2, msg: built.error, data: row });
+      } else {
+        try {
+          // Hybrid mode tells EVA to treat ProductID's value as a BackendID
+          // when it doesn't match an internal ID. PriceListAdjustmentID stays
+          // as EVA's internal numeric ID (no lookup needed for that one).
+          const res = await evaApiCall(
+            "CreatePriceListManualInputAdjustment",
+            built.body,
+            {
+              "eva-ids-mode": "Hybrid",
+              "eva-user-agent": "EVA-Buddy/1.7.0",
+            }
+          );
+          if (res && res.status >= 200 && res.status < 300) {
+            state.successCount++;
+          } else {
+            const apiErr =
+              (res && res.data && (
+                (res.data.Error && (res.data.Error.Message || res.data.Error.Code)) ||
+                res.data.Message || res.data.message
+              )) ||
+              (res && res.error) ||
+              ("HTTP " + (res && res.status));
+            state.errors.push({ rowNum: i + 2, msg: String(apiErr), data: row });
+          }
+        } catch (err) {
+          state.errors.push({ rowNum: i + 2, msg: String(err), data: row });
+        }
+      }
+      state.processedCount = i + 1;
+      // Throttle UI re-renders: every row up to 100, then every 10
+      if (i < 100 || i % 10 === 0 || i === total - 1) renderProgress();
+    }
+
+    // Done step
+    const cancelled = state.cancelled;
+    const doneText = (cancelled ? "Cancelled. " : "Done. ") +
+      state.successCount + " of " + total + " uploaded · " + state.errors.length + " errors";
+    $(".eva-csv-done-text").textContent = doneText;
+    if (state.errors.length) {
+      const finalDet  = $(".eva-csv-errs-final");
+      const finalSum  = finalDet.querySelector(".eva-csv-errs-summary");
+      const finalOl   = finalDet.querySelector(".eva-csv-errs-list");
+      finalDet.hidden = false;
+      finalSum.textContent = "Show " + state.errors.length + " error" + (state.errors.length === 1 ? "" : "s");
+      finalOl.innerHTML = state.errors.map((e) =>
+        "<li><strong>Row " + e.rowNum + "</strong>: " + escapeHtmlPC(e.msg) + "</li>"
+      ).join("");
+      $(".eva-csv-copy-errs").hidden = false;
+    }
+    $(".step-progress").hidden = true;
+    $(".step-done").hidden = false;
+  };
+
+  const formatDuration = (sec) => {
+    sec = Math.round(sec);
+    if (sec < 60) return sec + "s";
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m < 60) return m + "m " + s + "s";
+    const h = Math.floor(m / 60);
+    return h + "h " + (m % 60) + "m";
+  };
+
+  // Keep our CSV button paired with EVA's xlsx button as the SPA re-renders.
+  setInterval(ensurePriceCsvButtons, 1000);
+
+  // -----------------------------------------------------------
+  // EVA Buddy filter section — a collapsible card injected as the top
+  // entry of EVA's right-hand filter panel on /orders/orders.
+  // Currently houses one tri-state: open-balance filter.
+  //
+  // How a toggle changes results:
+  //   1. We update our in-memory state and persist to chrome.storage.local.
+  //   2. We postMessage the new state to the page-world (page-hook), which
+  //      injects MinOpenAmountInTax / MaxOpenAmountInTax into the next
+  //      SearchOrders body — fields EVA's URL parser doesn't understand
+  //      but the API accepts.
+  //   3. We trigger an EVA refetch by clicking its "Search filters" /
+  //      "Search" control; falling back to a URL nudge if that fails.
+  // -----------------------------------------------------------
+  const EB_FILTER_SECTION_ID = "eva-buddy-filter-section";
+  const EB_FILTER_STORAGE_KEY = "eva-buddy:order-filters";
+
+  const isOrdersListPath = () =>
+    /^\/orders\/orders(\/|$|\?)/i.test(location.pathname);
+
+  // Default state. Mutated in place — the section UI re-renders from this.
+  const ebOrderFilters = {
+    // Mutually exclusive: 0 = N/A, 1 = customer owes, 2 = refund owed
+    openBalance: 0,
+    collapsed: false,
+  };
+
+  // Load persisted state on bootstrap.
+  try {
+    chrome.storage.local.get(EB_FILTER_STORAGE_KEY).then((got) => {
+      const saved = got && got[EB_FILTER_STORAGE_KEY];
+      if (saved && typeof saved === "object") Object.assign(ebOrderFilters, saved);
+      syncFiltersToPageWorld();
+      const sec = document.getElementById(EB_FILTER_SECTION_ID);
+      if (sec) renderEbFilterSection(sec);
+    });
+  } catch (_) {}
+
+  const persistEbFilters = () => {
+    try {
+      chrome.storage.local.set({ [EB_FILTER_STORAGE_KEY]: ebOrderFilters });
+    } catch (_) {}
+  };
+
+  // Bridge runtime filter state into the page world via localStorage —
+  // synchronous in both directions, so when EVA fires fetch right after our
+  // pushState the page-hook reads the up-to-date value. (postMessage is
+  // delivered on a microtask and would race the fetch.)
+  const EB_ORDER_FILTERS_RUNTIME_KEY = "eva-buddy:order-filters-runtime";
+  const syncFiltersToPageWorld = () => {
+    try {
+      localStorage.setItem(
+        EB_ORDER_FILTERS_RUNTIME_KEY,
+        JSON.stringify({ openBalance: ebOrderFilters.openBalance })
+      );
+    } catch (_) {}
+  };
+
+  // Trigger EVA to fire a fresh SearchOrders. The "Search" icon button and
+  // unknown URL params don't re-trigger EVA's router — but a change to
+  // `start` (or any param it tracks) does, when combined with a popstate
+  // dispatch. We flip start to a different value and immediately back to 0
+  // so the user always lands on page 1 with the new results.
+  const triggerEvaRefetch = () => {
+    try {
+      const u = new URL(location.href);
+      const curStart = parseInt(u.searchParams.get("start") || "0", 10) || 0;
+      // Pick a different value so the push actually changes URL state.
+      u.searchParams.set("start", curStart === 0 ? "1" : "0");
+      history.pushState(null, "", u.toString());
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      // Then come back to start=0 for the final view.
+      setTimeout(() => {
+        const u2 = new URL(location.href);
+        u2.searchParams.set("start", "0");
+        history.pushState(null, "", u2.toString());
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }, 180);
+    } catch (_) {}
+  };
+
+  const escapeHtmlEb = (s) =>
+    String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+
+  const renderEbFilterSection = (section) => {
+    const ob = ebOrderFilters.openBalance | 0;
+    const isActive = (n) => (ob === n ? "eb-active" : "");
+    const collapsed = !!ebOrderFilters.collapsed;
+    section.innerHTML =
+      '<div class="eb-filter-card">' +
+        '<button class="eb-filter-header" type="button" aria-expanded="' +
+          (collapsed ? "false" : "true") + '">' +
+          '<span class="eb-filter-icon">' + (collapsed ? "+" : "−") + '</span>' +
+          '<span class="eb-filter-title">EVA Buddy filters</span>' +
+        '</button>' +
+        '<div class="eb-filter-body"' + (collapsed ? ' hidden' : '') + '>' +
+          '<div class="eb-filter-row">' +
+            '<div class="eb-filter-row-label">Open balance</div>' +
+            '<div class="eb-filter-row-hint">Fields EVA\'s sidebar can\'t set — uses Min/MaxOpenAmountInTax on the API.</div>' +
+            '<div class="eb-filter-tristate" role="listbox">' +
+              '<button data-eb-ob="1" class="' + isActive(1) + '" type="button" role="option" aria-selected="' + (ob === 1) + '">Customer owes</button>' +
+              '<button data-eb-ob="2" class="' + isActive(2) + '" type="button" role="option" aria-selected="' + (ob === 2) + '">Refund owed</button>' +
+              '<button data-eb-ob="0" class="' + isActive(0) + '" type="button" role="option" aria-selected="' + (ob === 0) + '">N/A</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    section.querySelector(".eb-filter-header").addEventListener("click", () => {
+      ebOrderFilters.collapsed = !ebOrderFilters.collapsed;
+      persistEbFilters();
+      renderEbFilterSection(section);
+    });
+    section.querySelectorAll("[data-eb-ob]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const v = Number(btn.dataset.ebOb) | 0;
+        if (ebOrderFilters.openBalance === v) return;
+        ebOrderFilters.openBalance = v;
+        persistEbFilters();
+        renderEbFilterSection(section);
+        syncFiltersToPageWorld();
+        triggerEvaRefetch();
+      });
+    });
+  };
+
+  // Find EVA's right-hand filter panel — anchored by the "Filters" h2 at the
+  // top of the sidebar. The cards container is the scrollable ancestor with
+  // an `overflow-y-auto` class; that's the panel we mount inside.
+  const findEvaFilterPanel = () => {
+    const h2 = Array.from(document.querySelectorAll("h2")).find(
+      (h) => (h.textContent || "").trim() === "Filters" &&
+             h.getBoundingClientRect().x > 700
+    );
+    if (!h2) return null;
+    let p = h2;
+    for (let i = 0; i < 12 && p; i++) {
+      const cls = (p.className || "").toString();
+      if (/\boverflow-y-auto\b/.test(cls)) return p;
+      p = p.parentElement;
+    }
+    return null;
+  };
+
+  const ensureEbFilterSection = () => {
+    if (!isOrdersListPath()) {
+      const existing = document.getElementById(EB_FILTER_SECTION_ID);
+      if (existing) existing.remove();
+      return;
+    }
+    if (document.getElementById(EB_FILTER_SECTION_ID)) return;
+    const panel = findEvaFilterPanel();
+    if (!panel) return;
+    const section = document.createElement("div");
+    section.id = EB_FILTER_SECTION_ID;
+    section.className = "mb-4";
+    // Insert immediately after the heading row (a direct child of the panel
+    // that contains the "Filters" h2). Falls back to the very top if not
+    // found, so we always end up at least at the top of the cards.
+    const headerRow = Array.from(panel.children).find(
+      (c) => c.querySelector && c.querySelector("h2") &&
+             (c.querySelector("h2").textContent || "").trim() === "Filters"
+    );
+    if (headerRow && headerRow.nextSibling) {
+      panel.insertBefore(section, headerRow.nextSibling);
+    } else {
+      panel.insertBefore(section, panel.firstChild);
+    }
+    renderEbFilterSection(section);
+    syncFiltersToPageWorld();
+  };
+
+  setInterval(ensureEbFilterSection, 1000);
 })();
