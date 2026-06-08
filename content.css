@@ -690,6 +690,32 @@ html.eva-buddy-dark #root hr {
   overflow-y: auto;
 }
 
+#eva-price-csv-modal .eva-csv-exp {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+#eva-price-csv-modal .eva-csv-banner {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 #eva-price-csv-modal .eva-csv-step p { margin: 0 0 10px; }
 
 #eva-price-csv-modal .eva-csv-step code {

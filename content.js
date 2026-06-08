@@ -1763,7 +1763,7 @@
       const ours = document.createElement("button");
       ours.className = PRICE_CSV_BTN_CLASS;
       ours.type = "button";
-      ours.title = "EVA Buddy: bulk-upload prices via UTF-8 CSV (one row at a time)";
+      ours.title = "EVA Buddy: bulk-upload prices via UTF-8 CSV (experimental — verify a small batch first)";
       // Same dimensions as EVA's icon button (a small square) so the row
       // doesn't shift; "CSV" inside is the label.
       ours.innerHTML = '<span class="eva-price-csv-btn-label">CSV</span>';
@@ -1923,12 +1923,13 @@
       '<div class="eva-csv-card">' +
         '<header class="eva-csv-head">' +
           '<div>' +
-            '<strong>EVA Buddy · CSV price upload</strong>' +
+            '<strong>EVA Buddy · CSV price upload <span class="eva-csv-exp">experimental</span></strong>' +
             '<span class="eva-csv-sub">Adjustment ' + escapeHtmlPC(defaultAdjId) + '</span>' +
           '</div>' +
           '<button type="button" class="eva-csv-close" aria-label="Close">×</button>' +
         '</header>' +
         '<div class="eva-csv-body">' +
+          '<div class="eva-csv-banner">⚠️ Experimental. Try a small batch first and confirm the prices land before running a large upload.</div>' +
           // Pick step
           '<section class="eva-csv-step step-pick">' +
             '<p>Pick a UTF-8 CSV. Expected columns: ' +
