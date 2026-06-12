@@ -33,8 +33,19 @@
     } catch (_) { return null; }
   }
 
+  // Only rewrite SearchOrders bodies when the user is actually on the orders
+  // list page. Without this gate, the filter injection follows the tab into
+  // every page that happens to fire SearchOrders (dashboard widgets, related-
+  // orders panels, etc.), making it look like the filter is "on everywhere".
+  function isOrdersListPathForHook() {
+    var p = "";
+    try { p = (window.location && window.location.pathname) || ""; } catch (_) {}
+    return p.replace(/\/$/, "") === "/orders/orders";
+  }
+
   function applyEbFiltersToSearchOrdersBody(bodyStr) {
     if (!bodyStr || typeof bodyStr !== "string") return bodyStr;
+    if (!isOrdersListPathForHook()) return bodyStr;
     var f = readEbOrderFilters();
     var ob = f && (f.openBalance | 0);
     if (!ob) return bodyStr;

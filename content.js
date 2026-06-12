@@ -1881,6 +1881,101 @@
     return null;
   };
 
+  // -------- Push (bulk) configuration --------
+  // For SAP-pushed pricelists we use POST /async-message/PushPriceList in
+  // chunks instead of one CreatePriceListManualInputAdjustment per row.
+  // Each chunk uploads up to PRICE_PUSH_CHUNK_SIZE prices in a single call;
+  // EVA processes the chunk async server-side (WaitForCompletion: false).
+  const PRICE_PUSH_CHUNK_SIZE = 5000;
+
+  // Pull pricelist metadata so we can build the Push envelope (needs ID +
+  // SystemID — the caller-side identifiers, not EVA's internal numeric ID).
+  const fetchPricelistMeta = async (internalPricelistId) => {
+    try {
+      const res = await evaApiCall("GetPriceListByID", { ID: internalPricelistId });
+      if (!res || res.status < 200 || res.status >= 300 || !res.data) return null;
+      const r = res.data.Result || res.data;
+      if (!r) return null;
+      // Push needs BackendID + BackendSystemID. UI-created pricelists have
+      // neither — we return null so the caller falls back to per-row Create.
+      if (!r.BackendID || !r.BackendSystemID) return null;
+      return {
+        backendID:       String(r.BackendID),
+        backendSystemID: String(r.BackendSystemID),
+        currencyID:      r.CurrencyID || null,
+        timeZone:        r.TimeZone || null,
+        includingVat:    !!r.IncludingVat,
+      };
+    } catch (_) {
+      return null;
+    }
+  };
+
+  // Find the BackendID of the specific adjustment (component) the user has
+  // open — that's the Component.ID Push wants. The caller already has the
+  // adjustment's EVA-internal numeric ID; we map it via ListPriceListAdjustments.
+  const fetchAdjustmentBackendID = async (internalPricelistId, internalAdjustmentId) => {
+    try {
+      const res = await evaApiCall("ListPriceListAdjustments", {
+        PageConfig: { Filter: { PriceListID: internalPricelistId }, Limit: 200, SortDirection: 0, Start: 0 },
+      });
+      if (!res || res.status < 200 || res.status >= 300 || !res.data) return null;
+      const r = res.data.Result;
+      const page = r && (r.Page || r.Results);
+      if (!Array.isArray(page)) return null;
+      const target = page.find((a) => String(a.ID) === String(internalAdjustmentId));
+      return target && target.BackendID ? String(target.BackendID) : null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  // Validate + map one CSV row to one Prices[] entry for the Push body.
+  // Same validation rules as buildAdjBody so error messages stay consistent.
+  // Prices[].ID strategy: ProductBackendID (upsert key). Change PRICE_ENTRY_ID
+  // here if SAP confirms a different convention.
+  const buildPriceEntry = (row) => {
+    const bid   = pickCol(row, ["BackendID", "Backend ID", "ProductBackendID", "ProductID"]);
+    const price = pickCol(row, ["Price", "Value"]);
+    const eff   = pickCol(row, ["EffectiveDate", "Effective Date", "StartDate", "From"]);
+    const exp   = pickCol(row, ["ExpireDate", "Expire Date", "EndDate", "Until", "To"]);
+    if (!bid)              return { error: "Missing BackendID" };
+    if (price === "")      return { error: "Missing Price" };
+    const valNum = Number(String(price).replace(",", "."));
+    if (!isFinite(valNum)) return { error: 'Price not numeric: "' + price + '"' };
+    const entry = {
+      ID: String(bid),           // upsert key — TODO confirm with SAP
+      ProductID: String(bid),     // BackendID value, resolved via Hybrid header
+      Price: valNum,
+    };
+    if (eff) entry.StartDate = normaliseDate(eff);
+    if (exp) entry.EndDate   = normaliseDate(exp);
+    return { entry };
+  };
+
+  // Assemble the Push envelope from resolved meta + a batch of price entries.
+  // Components[0] targets the existing adjustment by its BackendID; we don't
+  // pass Name/StartDate/EndDate so EVA leaves the component's own metadata
+  // untouched. RemoveUnprovidedEntries: false means other entries are kept.
+  const buildPushBody = (meta, componentBackendID, entries) => ({
+    ID: meta.backendID,
+    SystemID: meta.backendSystemID,
+    LowProductCountOption: 0,
+    RecalculateEffectivePrices: false,
+    WaitForCompletion: false,
+    Components: [
+      {
+        ID: componentBackendID,
+        Type: 0,                  // PriceEntries
+        Delete: false,
+        PriceEntriesData: {
+          RemoveUnprovidedEntries: false,
+          Prices: entries,
+        },
+      },
+    ],
+  });
+
   // Build one CreatePriceListManualInputAdjustment body for a single CSV row.
   // The CSV's `ID` column is intentionally IGNORED — the adjustment ID comes
   // from the page's most recent ListPriceListManualInputAdjustments call so
@@ -2057,7 +2152,17 @@
     });
   };
 
-  const runUpload = async (state, overlay) => {
+  // Pull a friendly error message out of an evaApiCall result.
+  const apiErrMsg = (res) =>
+    (res && res.data && (
+      (res.data.Error && (res.data.Error.Message || res.data.Error.Code)) ||
+      res.data.Message || res.data.message
+    )) ||
+    (res && res.error) ||
+    ("HTTP " + (res && res.status));
+
+  // Render the shared progress block on either upload path.
+  const makeProgressRenderer = (overlay, state, total, started, modeLabel) => () => {
     const $ = (sel) => overlay.querySelector(sel);
     const progText = $(".eva-csv-progress-text");
     const barFill  = $(".eva-csv-bar-fill");
@@ -2065,28 +2170,141 @@
     const errsSum  = errsDet.querySelector(".eva-csv-errs-summary");
     const errsOl   = errsDet.querySelector(".eva-csv-errs-list");
 
+    const done = state.processedCount;
+    const pct = total ? (done / total) * 100 : 0;
+    barFill.style.width = pct.toFixed(2) + "%";
+    const elapsed = (Date.now() - started) / 1000;
+    const rate = done > 0 ? elapsed / done : 0;
+    const remaining = rate * (total - done);
+    const eta = remaining > 0 ? " · ~" + formatDuration(remaining) + " left" : "";
+    progText.textContent =
+      modeLabel + " · " + done + " / " + total +
+      " · " + state.successCount + " ok · " + state.errors.length + " errors" + eta;
+    if (state.errors.length) {
+      errsDet.hidden = false;
+      errsSum.textContent = state.errors.length + " error" + (state.errors.length === 1 ? "" : "s");
+      errsOl.innerHTML = state.errors.slice(-50).map((e) =>
+        "<li><strong>" + escapeHtmlPC(e.label || ("Row " + e.rowNum)) + "</strong>: " + escapeHtmlPC(e.msg) + "</li>"
+      ).join("");
+    }
+  };
+
+  const renderDoneStep = (overlay, state, total, headlineText) => {
+    const $ = (sel) => overlay.querySelector(sel);
+    $(".eva-csv-done-text").textContent = headlineText;
+    if (state.errors.length) {
+      const finalDet = $(".eva-csv-errs-final");
+      const finalSum = finalDet.querySelector(".eva-csv-errs-summary");
+      const finalOl  = finalDet.querySelector(".eva-csv-errs-list");
+      finalDet.hidden = false;
+      finalSum.textContent = "Show " + state.errors.length + " error" + (state.errors.length === 1 ? "" : "s");
+      finalOl.innerHTML = state.errors.map((e) =>
+        "<li><strong>" + escapeHtmlPC(e.label || ("Row " + e.rowNum)) + "</strong>: " + escapeHtmlPC(e.msg) + "</li>"
+      ).join("");
+      $(".eva-csv-copy-errs").hidden = false;
+    }
+    $(".step-progress").hidden = true;
+    $(".step-done").hidden = false;
+  };
+
+  // -------- Push path (bulk, chunked) --------
+  // pre-validates every row → drops invalid ones into state.errors → chunks
+  // valid entries into PRICE_PUSH_CHUNK_SIZE batches → fires one
+  // PushPriceList_Async per chunk. Per-row error visibility is preserved (we
+  // log each invalid CSV row by rowNum); per-chunk errors are recorded with a
+  // "Chunk N" label so the user can tell row-level from chunk-level failures.
+  const runPushUpload = async (state, overlay, meta, componentBackendID) => {
     const total = state.rows.length;
     const started = Date.now();
-    const renderProgress = () => {
-      const done = state.processedCount;
-      const pct = total ? (done / total) * 100 : 0;
-      barFill.style.width = pct.toFixed(2) + "%";
-      const elapsed = (Date.now() - started) / 1000;
-      const rate = done > 0 ? elapsed / done : 0;
-      const remaining = rate * (total - done);
-      const eta = remaining > 0 ? " · ~" + formatDuration(remaining) + " left" : "";
-      progText.textContent =
-        "Processing " + done + " / " + total +
-        " · " + state.successCount + " ok · " + state.errors.length + " errors" +
-        eta;
-      if (state.errors.length) {
-        errsDet.hidden = false;
-        errsSum.textContent = state.errors.length + " error" + (state.errors.length === 1 ? "" : "s");
-        errsOl.innerHTML = state.errors.slice(-50).map((e) =>
-          "<li><strong>Row " + e.rowNum + "</strong>: " + escapeHtmlPC(e.msg) + "</li>"
-        ).join("");
+    const renderProgress = makeProgressRenderer(
+      overlay, state, total, started, "Push mode"
+    );
+
+    // 1. Pre-validate all rows so chunk N doesn't bring down validations for
+    //    rows we haven't reached yet. Build (rowNum, entry) pairs for the
+    //    valid ones; everything else is an error.
+    const valids = [];
+    for (let i = 0; i < total; i++) {
+      const row = state.rows[i];
+      const built = buildPriceEntry(row);
+      if (built.error) {
+        state.errors.push({ rowNum: i + 2, msg: built.error, data: row });
+      } else {
+        valids.push({ rowNum: i + 2, entry: built.entry });
       }
-    };
+    }
+    // Count pre-validation errors as processed already.
+    state.processedCount = state.errors.length;
+    renderProgress();
+
+    // 2. Chunk valid entries and Push each.
+    const chunkSize = PRICE_PUSH_CHUNK_SIZE;
+    const totalChunks = Math.max(1, Math.ceil(valids.length / chunkSize));
+    let chunkIdx = 0;
+    for (let start = 0; start < valids.length; start += chunkSize) {
+      if (state.cancelled) break;
+      while (state.paused) {
+        await new Promise((r) => setTimeout(r, 200));
+        if (state.cancelled) break;
+      }
+      if (state.cancelled) break;
+
+      chunkIdx++;
+      const slice   = valids.slice(start, start + chunkSize);
+      const entries = slice.map((v) => v.entry);
+      const body    = buildPushBody(meta, componentBackendID, entries);
+      try {
+        const res = await evaApiCall(
+          "PushPriceList",
+          body,
+          {
+            "eva-ids-mode":   "Hybrid",
+            "eva-user-agent": "EVA-Buddy/1.7.0",
+          },
+          { async: true, timeoutMs: 60000 }
+        );
+        if (res && res.status >= 200 && res.status < 300) {
+          state.successCount += entries.length;
+        } else {
+          // Whole chunk failed — log once at the chunk level + tag the rows
+          // that were in it for traceability.
+          const msg = String(apiErrMsg(res));
+          state.errors.push({
+            label: "Chunk " + chunkIdx + "/" + totalChunks +
+                   " (rows " + slice[0].rowNum + "–" + slice[slice.length - 1].rowNum + ")",
+            msg,
+            data: { firstRow: slice[0].rowNum, lastRow: slice[slice.length - 1].rowNum, count: entries.length },
+          });
+        }
+      } catch (err) {
+        state.errors.push({
+          label: "Chunk " + chunkIdx + "/" + totalChunks,
+          msg: String(err),
+          data: { firstRow: slice[0].rowNum, lastRow: slice[slice.length - 1].rowNum, count: entries.length },
+        });
+      }
+      state.processedCount += slice.length;
+      renderProgress();
+    }
+
+    // 3. Done screen — message reminds the user that Push is async on EVA's side.
+    const cancelled = state.cancelled;
+    const headline = (cancelled ? "Cancelled. " : "Done. ") +
+      "Submitted " + state.successCount + " of " + total +
+      " prices in " + totalChunks + " chunk" + (totalChunks === 1 ? "" : "s") +
+      " · " + state.errors.length + " error" + (state.errors.length === 1 ? "" : "s") +
+      ". EVA is processing async — verify in the pricelist in a few minutes.";
+    renderDoneStep(overlay, state, total, headline);
+  };
+
+  // -------- Create path (per-row, fallback for UI-created pricelists) --------
+  const runCreateUpload = async (state, overlay, fallbackReason) => {
+    const total = state.rows.length;
+    const started = Date.now();
+    const renderProgress = makeProgressRenderer(
+      overlay, state, total, started,
+      fallbackReason ? "Create mode (fallback)" : "Create mode"
+    );
 
     for (let i = 0; i < total; i++) {
       if (state.cancelled) break;
@@ -2097,65 +2315,66 @@
       if (state.cancelled) break;
 
       const row = state.rows[i];
-      // Re-resolve adjustment ID per row: the user may have expanded a
-      // different adjustment between picking the file and starting. Snapshot
-      // is state.defaultAdjId; latest signal wins if present.
       const targetAdjId = findActiveAdjustmentId() || state.defaultAdjId;
       const built = buildAdjBody(row, targetAdjId);
       if (built.error) {
         state.errors.push({ rowNum: i + 2, msg: built.error, data: row });
       } else {
         try {
-          // Hybrid mode tells EVA to treat ProductID's value as a BackendID
-          // when it doesn't match an internal ID. PriceListAdjustmentID stays
-          // as EVA's internal numeric ID (no lookup needed for that one).
           const res = await evaApiCall(
             "CreatePriceListManualInputAdjustment",
             built.body,
             {
-              "eva-ids-mode": "Hybrid",
+              "eva-ids-mode":   "Hybrid",
               "eva-user-agent": "EVA-Buddy/1.7.0",
             }
           );
           if (res && res.status >= 200 && res.status < 300) {
             state.successCount++;
           } else {
-            const apiErr =
-              (res && res.data && (
-                (res.data.Error && (res.data.Error.Message || res.data.Error.Code)) ||
-                res.data.Message || res.data.message
-              )) ||
-              (res && res.error) ||
-              ("HTTP " + (res && res.status));
-            state.errors.push({ rowNum: i + 2, msg: String(apiErr), data: row });
+            state.errors.push({ rowNum: i + 2, msg: String(apiErrMsg(res)), data: row });
           }
         } catch (err) {
           state.errors.push({ rowNum: i + 2, msg: String(err), data: row });
         }
       }
       state.processedCount = i + 1;
-      // Throttle UI re-renders: every row up to 100, then every 10
       if (i < 100 || i % 10 === 0 || i === total - 1) renderProgress();
     }
 
-    // Done step
     const cancelled = state.cancelled;
-    const doneText = (cancelled ? "Cancelled. " : "Done. ") +
-      state.successCount + " of " + total + " uploaded · " + state.errors.length + " errors";
-    $(".eva-csv-done-text").textContent = doneText;
-    if (state.errors.length) {
-      const finalDet  = $(".eva-csv-errs-final");
-      const finalSum  = finalDet.querySelector(".eva-csv-errs-summary");
-      const finalOl   = finalDet.querySelector(".eva-csv-errs-list");
-      finalDet.hidden = false;
-      finalSum.textContent = "Show " + state.errors.length + " error" + (state.errors.length === 1 ? "" : "s");
-      finalOl.innerHTML = state.errors.map((e) =>
-        "<li><strong>Row " + e.rowNum + "</strong>: " + escapeHtmlPC(e.msg) + "</li>"
-      ).join("");
-      $(".eva-csv-copy-errs").hidden = false;
+    const headline = (cancelled ? "Cancelled. " : "Done. ") +
+      state.successCount + " of " + total + " uploaded · " +
+      state.errors.length + " error" + (state.errors.length === 1 ? "" : "s") +
+      (fallbackReason ? " · fell back to per-row Create (" + fallbackReason + ")" : "");
+    renderDoneStep(overlay, state, total, headline);
+  };
+
+  // Orchestrator — picks Push or Create based on what the pricelist supports.
+  const runUpload = async (state, overlay) => {
+    const $ = (sel) => overlay.querySelector(sel);
+    const progText = $(".eva-csv-progress-text");
+    progText.textContent = "Resolving pricelist…";
+
+    const plMatch = location.pathname.match(PRICELIST_PATH_RE);
+    const pricelistId = plMatch ? plMatch[1] : null;
+    const adjustmentInternalId = findActiveAdjustmentId() || state.defaultAdjId;
+
+    let meta = null;
+    let componentBackendID = null;
+    if (pricelistId) meta = await fetchPricelistMeta(pricelistId);
+    if (meta && adjustmentInternalId) {
+      componentBackendID = await fetchAdjustmentBackendID(pricelistId, adjustmentInternalId);
     }
-    $(".step-progress").hidden = true;
-    $(".step-done").hidden = false;
+
+    if (meta && componentBackendID) {
+      await runPushUpload(state, overlay, meta, componentBackendID);
+    } else {
+      const reason = !meta
+        ? "pricelist has no BackendSystemID (UI-created?)"
+        : "adjustment has no BackendID";
+      await runCreateUpload(state, overlay, reason);
+    }
   };
 
   const formatDuration = (sec) => {
@@ -2188,14 +2407,22 @@
   const EB_FILTER_SECTION_ID = "eva-buddy-filter-section";
   const EB_FILTER_STORAGE_KEY = "eva-buddy:order-filters";
 
-  const isOrdersListPath = () =>
-    /^\/orders\/orders(\/|$|\?)/i.test(location.pathname);
+  // Strict equality — we only ever want to mount on /orders/orders (the list
+  // view), not on order details (/orders/orders/<id>) and definitely not on
+  // any other module's "X overview with right-hand filter panel" pages like
+  // /stock-management/purchase-orders. A regex prefix-match would risk that.
+  const isOrdersListPath = () => {
+    const p = location.pathname.replace(/\/$/, "");
+    return p === "/orders/orders";
+  };
 
   // Default state. Mutated in place — the section UI re-renders from this.
+  // Collapsed by default so the section stays out of the way until needed;
+  // expanding/collapsing it persists per user.
   const ebOrderFilters = {
     // Mutually exclusive: 0 = N/A, 1 = customer owes, 2 = refund owed
     openBalance: 0,
-    collapsed: false,
+    collapsed: true,
   };
 
   // Load persisted state on bootstrap.
@@ -2301,16 +2528,21 @@
     });
   };
 
-  // Find EVA's right-hand filter panel — anchored by the "Filters" h2 at the
-  // top of the sidebar. The cards container is the scrollable ancestor with
-  // an `overflow-y-auto` class; that's the panel we mount inside.
+  // Find EVA's right-hand filter panel — locale-independent. The panel is the
+  // top-most ancestor in the right-side column whose class includes
+  // `overflow-y-auto`. We anchor on a structural cue (any h2 in the right
+  // ~third of the viewport that has a Tailwind text-3xl class), then walk up.
+  // We *don't* match on translated strings like "Filters" or "Status" so this
+  // works on Dutch / French / German EVA installs too. The URL check in
+  // `ensureEbFilterSection` is what restricts mounting to /orders/orders.
   const findEvaFilterPanel = () => {
-    const h2 = Array.from(document.querySelectorAll("h2")).find(
-      (h) => (h.textContent || "").trim() === "Filters" &&
-             h.getBoundingClientRect().x > 700
-    );
-    if (!h2) return null;
-    let p = h2;
+    const anchor = Array.from(document.querySelectorAll("h2")).find((h) => {
+      if (h.getBoundingClientRect().x <= 700) return false;
+      const cls = (h.className || "").toString();
+      return /\btext-3xl\b/.test(cls); // EVA's right-sidebar title styling
+    });
+    if (!anchor) return null;
+    let p = anchor;
     for (let i = 0; i < 12 && p; i++) {
       const cls = (p.className || "").toString();
       if (/\boverflow-y-auto\b/.test(cls)) return p;
@@ -2348,4 +2580,20 @@
   };
 
   setInterval(ensureEbFilterSection, 1000);
+
+  // React immediately to SPA navigation so the filter section doesn't linger
+  // for up to a second after leaving /orders/orders.
+  (function watchSpaNavForEbFilter() {
+    const reCheck = () => { try { ensureEbFilterSection(); } catch (_) {} };
+    window.addEventListener("popstate", reCheck);
+    ["pushState", "replaceState"].forEach((m) => {
+      const orig = history[m];
+      if (typeof orig !== "function") return;
+      history[m] = function () {
+        const r = orig.apply(this, arguments);
+        try { reCheck(); } catch (_) {}
+        return r;
+      };
+    });
+  })();
 })();
