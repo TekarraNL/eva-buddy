@@ -28,7 +28,8 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  width: 44px;
+  width: auto;
+  min-width: 44px;
   height: 16px;
   border: none;
   border-radius: 0 0 8px 8px;
@@ -37,13 +38,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 11px;
   line-height: 1;
   color: rgba(255, 255, 255, 0.95);
-  padding: 0 0 1px;
+  padding: 0 10px 1px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
-  transition: width 0.15s ease, color 0.15s ease;
+  transition: filter 0.15s ease, color 0.15s ease;
 }
 
 #eva-env-bar-lip.eva-env-test  { background-color: #16a34a; }
@@ -51,7 +53,14 @@
 #eva-env-bar-lip.eva-env-prod  { background-color: #dc2626; }
 
 #eva-env-bar-lip:hover {
-  width: 56px;
+  filter: brightness(1.12);
+}
+
+#eva-env-bar-lip .eva-lip-count {
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.95;
 }
 
 #eva-env-bar-dropdown {
@@ -75,6 +84,10 @@
 }
 
 #eva-env-bar-dropdown .eva-dd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   font-size: 11px;
   text-transform: uppercase;
@@ -82,6 +95,44 @@
   color: #777;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   background: #fafafa;
+}
+
+#eva-env-bar-dropdown .eva-dd-clear {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+#eva-env-bar-dropdown .eva-dd-clear:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+#eva-env-bar-dropdown .eva-dd-toolbar {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+}
+
+#eva-env-bar-dropdown .eva-dd-filter {
+  width: 100%;
+  padding: 5px 8px;
+  font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  outline: none;
+  background: #fff;
+  color: #111;
+  box-sizing: border-box;
+}
+
+#eva-env-bar-dropdown .eva-dd-filter:focus {
+  border-color: #2563eb;
 }
 
 #eva-env-bar-dropdown .eva-dd-list {
@@ -115,6 +166,18 @@
 #eva-env-bar-dropdown .eva-dd-name {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+
+#eva-env-bar-dropdown .eva-dd-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.07);
+  color: #555;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
 }
 
 #eva-env-bar-dropdown .eva-dd-time {
@@ -190,52 +253,6 @@ a.eva-has-return {
   padding: 6px 12px !important;
   border-radius: 6px !important;
   font-weight: 500 !important;
-}
-
-#eva-order-nav {
-  position: fixed;
-  top: 58px;
-  right: 16px;
-  z-index: 2147483646;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 13px;
-  color: #111;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
-  user-select: none;
-}
-
-#eva-order-nav button {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 2px 6px;
-  font-size: 16px;
-  color: #111;
-  border-radius: 4px;
-  line-height: 1;
-}
-
-#eva-order-nav button:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-#eva-order-nav button:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-#eva-order-nav .eva-nav-pos {
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: #666;
-  letter-spacing: 0.2px;
 }
 
 #eva-order-tip {
@@ -315,6 +332,18 @@ a.eva-has-return {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* While locked, rows are clickable — they open the capture in the viewer
+   with the filter pre-set to the matched path. */
+#eva-source-tip.eva-src-pinned .eva-src-row {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+#eva-source-tip.eva-src-pinned .eva-src-row:hover {
+  background: rgba(37, 99, 235, 0.08);
 }
 
 #eva-source-tip .eva-src-ep {

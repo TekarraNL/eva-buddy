@@ -38,6 +38,31 @@
   }
 })();
 
+// -----------------------------------------------------------
+// Feature toggles — shared with the content scripts via
+// chrome.storage.local (they listen to onChanged, so flips apply
+// to open EVA tabs immediately).
+// -----------------------------------------------------------
+(() => {
+  const FEATURES_KEY = "eva-buddy:features";
+  const DEFAULTS = { sourceInspector: true, hoverQr: true, orderPreview: true };
+  const boxes = Array.from(document.querySelectorAll("input[data-feature]"));
+  if (!boxes.length) return;
+  try {
+    chrome.storage.local.get(FEATURES_KEY).then((got) => {
+      const f = Object.assign({}, DEFAULTS, (got && got[FEATURES_KEY]) || {});
+      boxes.forEach((b) => { b.checked = f[b.dataset.feature] !== false; });
+    });
+  } catch (_) {}
+  boxes.forEach((b) =>
+    b.addEventListener("change", () => {
+      const f = Object.assign({}, DEFAULTS);
+      boxes.forEach((x) => { f[x.dataset.feature] = x.checked; });
+      try { chrome.storage.local.set({ [FEATURES_KEY]: f }); } catch (_) {}
+    })
+  );
+})();
+
 (async () => {
   const ENVS = {
     test: { color: "#16a34a", label: "TEST" },

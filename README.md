@@ -10,19 +10,18 @@ The extension doesn't need any extra permissions and just uses what's available 
 - **Colored top stripe** — thin 12px bar at the top of every EVA page in the environment's color (🟢 test / 🟠 acceptance / 🔴 production). Hover for the full hostname.
 - **Tinted favicon** — the EVA logo on a colored background, visible even in unfocused tabs.
 - **🚀 title prefix** for `beyond--` URLs so the Beyond backend stands out.
-- **Hover-to-QR** on product rows — hover any product row on the products overview, stock overview, or availability page and a QR of its EAN appears next to the cursor (decoded from the page's own `GetProducts` / `SearchProducts` API responses, no extra requests).
+- **Hover-to-QR** on product rows — hover any product row on the products overview, stock overview, or availability page and a QR of its EAN appears next to the cursor (decoded from the page's own `GetProducts` / `SearchProducts` API responses, no extra requests). Togglable from the popup.
 - **Alt-click any numeric ID** anywhere in EVA to copy it to your clipboard, with a brief flash on the click.
-- **Order list hover preview** — on the orders overview, hover any row to see a labeled tooltip with that order's columns (status, total, customer, dates, etc.) without opening it.
-- **Prev/next order pill** — on any order detail page, a small pill at the top-right (`← N / 25 →`) walks you through the orders in the list you most recently visited. The list is captured to `localStorage` whenever you load `/orders/orders`.
+- **Order list hover preview** — on the orders overview, hover any row to see a labeled tooltip with that order's columns (status, total, customer, dates, etc.) without opening it. Togglable from the popup.
 - **Related orders tab highlighted on returns** — when an order has any return attached, the **Related orders** tab on the order detail page is filled with a red pill so you can see at a glance there's something to investigate. The extension auto-replays `GetReturnOrdersForOrder` using auth headers harvested from a real captured EVA call, so the highlight appears immediately on `/order-details` — you don't have to click into the Related orders tab first.
 - **Backend ID on consumer pages** — on `/people/consumers/<id>/general-info`, a **Backend ID** row is appended to the General information section, pulled from the captured `GetUser` response (EVA returns this but doesn't display it).
 - **Dashboard search → orders quick-jump** — on `/dashboard/search`, typing a number (order ID) or an email and pressing Enter routes you straight to `/orders/orders?query=<value>` instead of EVA's default page-search behavior. Other inputs pass through to EVA's normal search.
 - **Module quick-switch** — click the module name/icon next to the EVA logo (top-left, which normally does nothing) to open a dropdown of all admin modules (Compliance, Control room, Financials, Orders, Organizations, People, PIM, Promotions, Stock, Tasks) with their real EVA icons, the current one highlighted. Works on every admin page. Icons are harvested live from EVA and cached, with a branded-color initial as the fallback until cached. The menu also includes **Web POS** (EVA's `/pos/` app, which has no dashboard tile) pointing at the current environment's POS, using a bundled logo.
 - **Dark mode** — the 🌙 toggle in the popup darkens both the popup *and* the entire EVA admin UI. EVA has no native dark theme, so this is a "smart invert" of EVA's app root (soft `~#1a` surfaces, lightened borders for separation, images/brand colors re-inverted to stay correct). The colored env stripe and all of eva-buddy's own UI keep their true colors. The preference is shared via `chrome.storage.local` and applied before paint, so it persists and doesn't flash.
 - **EVA Buddy filters (orders list)** — collapsible filter card injected just under EVA's own "Filters" heading on `/orders/orders`. A landing zone for extra filters that EVA's UI doesn't expose. Today it carries one tri-state — **Open balance: Customer owes / Refund owed / N/A** — which maps to `MinOpenAmountInTax: 0.01` / `MaxOpenAmountInTax: -0.01`. EVA's own sidebar can't set those fields, but the API accepts them. Mechanics: content script writes the chosen state to `localStorage`, the page-world hook clones the next `SearchOrders` `Request` object and rewrites its body before forwarding to fetch, and we nudge EVA's router by flipping the URL `start` param to refetch. State persists across reloads in `chrome.storage.local`. (Note: the refetch nudge causes one brief intermediate frame as the router transitions — both fetches carry the filter, so the steady state is correct.)
-- **Price-list CSV bulk upload** — EXPERIMENTAL FEATURE - on a price-list page, whenever EVA's own upload button is visible on an adjustment, EVA Buddy docks a **CSV** button next to it. Pick a UTF-8 CSV with columns `BackendID, Price, EffectiveDate, ExpireDate` and EVA Buddy streams it row by row through `CreatePriceListManualInputAdjustment` (with `EVA-IDs-Mode: Hybrid` so the BackendID is resolved server-side). The target adjustment is detected from the page's own `ListPriceListManualInputAdjustments` call, so any `ID` column in the CSV is ignored. One row per call, so the server is never asked to chew a giant payload — EVA's own xlsx upload chokes past a few hundred rows; this handles 100k+. Live progress bar, errors collected per row (copyable), pause/cancel any time.
-- **Source Inspector (hover trace)** — EVA's admin is largely "headless": the screen is filled from JSON, but you never know which call/field. Hover any leaf text on a page for ~350 ms and a tooltip shows every captured response the value appears in, formatted as `EndpointName › path.to.field`. Long lists are scrollable; **press Shift to lock** the tooltip in place so you can scroll/select inside it (Esc or click-out to close). Always on; works against the rolling buffer of API responses captured for the current page.
-- **API-response viewer ("the lip")** — a small lip in the middle of the colored top stripe. Click it to see all of the page's captured API responses, listed by endpoint. Click any one to open it in a new tab as a viewer that flattens the JSON to one row per leaf value, with:
+- **Price-list CSV bulk upload** — EXPERIMENTAL FEATURE - on a price-list page, whenever EVA's own upload button is visible on an adjustment, EVA Buddy docks a **CSV** button next to it. Pick a UTF-8 CSV with columns `BackendID, Price, EffectiveDate, ExpireDate`. SAP-pushed pricelists go through chunked `PushPriceList` calls (5000 rows per chunk, async server-side); UI-created pricelists fall back to one `CreatePriceListManualInputAdjustment` per row (with `EVA-IDs-Mode: Hybrid` so the BackendID is resolved server-side). The target adjustment is detected from the page's own `ListPriceListManualInputAdjustments` call, so any `ID` column in the CSV is ignored. EVA's own xlsx upload chokes past a few hundred rows; this handles 100k+. Live progress bar, errors collected per row (copyable), pause/cancel any time, and a **Retry failed rows** button on the done screen that re-runs just the failures.
+- **Source Inspector (hover trace)** — EVA's admin is largely "headless": the screen is filled from JSON, but you never know which call/field. Hover any leaf text on a page for ~350 ms and a tooltip shows every captured response the value appears in, formatted as `EndpointName › path.to.field`. Long lists are scrollable; **press Shift to lock** the tooltip in place so you can scroll/select inside it (Esc or click-out to close). While locked, **click any row** to open that capture in the JSON viewer with the filter pre-set to the matched path. Togglable from the popup; works against the rolling buffer of API responses captured for the current page.
+- **API-response viewer ("the lip")** — a small lip in the middle of the colored top stripe, showing a live count of captured responses. Click it for the capture list — grouped by endpoint (repeat calls get an `×N` badge and open the newest), with a filter box and a **Clear** button. Click any entry to open it in a new tab as a viewer that flattens the JSON to one row per leaf value, with:
   - Filter box that matches across response, request headers, and request payload.
   - Click the path or value cell to copy it.
   - Per-row **`{ }`** button to copy the parent object as JSON (useful context for nested values).
@@ -34,6 +33,8 @@ The extension doesn't need any extra permissions and just uses what's available 
   - 🟢 🟠 🔴 row to switch which env's API QR is shown.
   - **Open page in** 🟢 🟠 🔴 row to open the same path on a different env in a new tab.
   - 🚀 toggle to swap between Beyond and the regular host for the active tab (highlighted with a circle when Beyond is on).
+  - **Find product by Backend ID** — type a backend ID + Enter to jump straight to the product page (Shift+Enter opens the raw API response instead).
+  - **Features** section — checkboxes to turn the Source Inspector, hover-QR, and order hover preview on/off; applies to open EVA tabs immediately.
   - EVA suite version chip at the bottom (from `/build.json`; hover for branch and commit).
 
 
@@ -59,17 +60,36 @@ To get updates after a `git pull`, hit the refresh icon on the extension's card 
 
 ## Layout
 
+The content scripts share a `globalThis.__evaBuddy` namespace (set up by `lib.js`)
+and load in manifest order — no build step.
+
 ```
-content.css / content.js   — top stripe, favicon swap, title prefix, hover-QR, alt-click copy,
-                             order helpers, dashboard hijack, related-orders highlight,
-                             consumer Backend ID injection, bar-lip viewer trigger,
-                             module quick-switch dropdown, EVA dark mode (smart invert)
+pure.js                    — pure helpers (CSV parsing, date normalising, HTML escaping,
+                             return detection); also the unit under test in test/
+lib.js                     — core: env detection, feature flags, single scheduler tick +
+                             SPA route detection, shared pointer dispatcher
+capture.js                 — API-response buffer, Source Inspector value index, auth-header
+                             harvest, evaApiCall, viewer launcher
+ui-chrome.js               — top stripe + lip (capture count), captures dropdown, favicon
+                             swap, title prefix, EVA dark mode (smart invert)
+tips.js                    — hover-QR on product rows + order list hover preview
+inspector.js               — Source Inspector hover trace (Shift-lock, click row → viewer)
+nav.js                     — module quick-switch dropdown, dashboard search hijack,
+                             alt-click ID copy
+orders.js                  — related-orders return highlight, EVA Buddy orders filter
+consumers.js               — consumer Backend ID injection
+products.js                — product-detail Prices card
+price-csv.js               — price-list CSV bulk upload (Push/Create modes, retry)
+bridge.js                  — popup messaging (build chip, backend-ID product lookup)
+content.css                — styles for all injected UI
 page-hook.js               — runs in the page world; captures every EVA /message/* response
-                             (and its request headers), forwards them to content.js, and
-                             accepts replay-fetch requests using harvested auth headers
+                             (and its request headers), forwards them to the content scripts,
+                             and accepts replay-fetch requests using harvested auth headers
 qrcode.js                  — bundled QR generator (port of Project Nayuki's library)
-popup.html / popup.css / popup.js — toolbar popup (API QR, env jump, Beyond toggle, build chip, dark-mode toggle)
+popup.html / popup.css / popup.js — toolbar popup (API QR, env jump, Beyond toggle,
+                             product lookup, feature toggles, build chip, dark-mode toggle)
 viewer.html / viewer.css / viewer.js — JSON viewer opened from the bar-lip dropdown
+test/pure.test.js          — unit tests for pure.js (run with `node --test test/pure.test.js`)
 manifest.json              — Manifest V3 config
 icon-source.png            — source for the toolbar/extension icon
 icon-16/32/48/128.png      — rendered icon sizes

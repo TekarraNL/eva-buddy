@@ -1,11 +1,8 @@
 /*
  * Runs in the page's MAIN world. Hooks fetch / XHR to capture every JSON
  * response from EVA's /message/<endpoint> API and forwards a slim event to
- * the content script via window.postMessage.
- *
- * Two consumers in content.js:
- *   - product-index builder (for hover-QR)
- *   - response capture buffer (for the bar-lip dropdown / viewer)
+ * the content scripts via window.postMessage (consumed by capture.js, which
+ * fans it out to the features).
  */
 (function () {
   "use strict";

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "eva-buddy",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "EVA admin quality-of-life: env color stripe, dark mode, module switcher, hover-QR, JSON/API tools, and order & consumer helpers.",
   "icons": {
     "16": "icon-16.png",
@@ -42,7 +42,21 @@
         "*://*.acc.eva-online.cloud/*",
         "*://*.prod.eva-online.cloud/*"
       ],
-      "js": ["qrcode.js", "content.js"],
+      "js": [
+        "qrcode.js",
+        "pure.js",
+        "lib.js",
+        "capture.js",
+        "ui-chrome.js",
+        "tips.js",
+        "inspector.js",
+        "nav.js",
+        "orders.js",
+        "consumers.js",
+        "products.js",
+        "price-csv.js",
+        "bridge.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_start",
       "all_frames": false

@@ -111,6 +111,10 @@
   const hasRequest = headerRows.length > 0 || payloadRows.length > 0;
   toggleRequestEl.hidden = !hasRequest;
 
+  // A Source Inspector jump passes the matched path along — pre-fill the
+  // filter so the viewer opens scoped to that value.
+  if (stored.filter) filterEl.value = String(stored.filter);
+
   // -----------------------------------------------------------
   // Render
   // -----------------------------------------------------------
