@@ -83,7 +83,7 @@ body {
    Content
    ----------------------------------------------------------- */
 #content {
-  padding: 14px 12px 16px;
+  padding: 12px 12px 14px;
 }
 
 /* QR section: hero card with caption + env switcher dots */
@@ -91,14 +91,14 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .qr-card {
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,8 +108,8 @@ body {
 
 #qr,
 #qr svg {
-  width: 200px;
-  height: 200px;
+  width: 176px;
+  height: 176px;
   display: block;
 }
 
@@ -164,8 +164,8 @@ body {
    Sections under the QR — "Open this page in" + lookup.
    ----------------------------------------------------------- */
 .popup-section {
-  margin-top: 14px;
-  padding-top: 12px;
+  margin-top: 11px;
+  padding-top: 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
@@ -173,14 +173,18 @@ body {
   font-size: 12px;
   font-weight: 500;
   color: #4b5563;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 
 /* Jump row layout — the three env circles stay centered (so they line up
    vertically with the QR-section env dots), and the divider + rocket float
-   on the right via absolute positioning so they don't push the cluster off. */
+   on the right via absolute positioning so they don't push the cluster off.
+   The row is a centering flex container so the circle cluster centers the
+   same way the QR env dots do, regardless of the cluster's own width. */
 .jump-row {
   position: relative;
+  display: flex;
+  justify-content: center;
 }
 
 .jump-extras {

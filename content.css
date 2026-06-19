@@ -28,8 +28,7 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  width: auto;
-  min-width: 44px;
+  width: 44px;
   height: 16px;
   border: none;
   border-radius: 0 0 8px 8px;
@@ -38,14 +37,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 11px;
   line-height: 1;
   color: rgba(255, 255, 255, 0.95);
-  padding: 0 10px 1px;
+  padding: 0 0 1px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
-  transition: filter 0.15s ease, color 0.15s ease;
+  transition: width 0.15s ease, color 0.15s ease;
 }
 
 #eva-env-bar-lip.eva-env-test  { background-color: #16a34a; }
@@ -53,14 +51,7 @@
 #eva-env-bar-lip.eva-env-prod  { background-color: #dc2626; }
 
 #eva-env-bar-lip:hover {
-  filter: brightness(1.12);
-}
-
-#eva-env-bar-lip .eva-lip-count {
-  font-size: 10px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.95;
+  width: 56px;
 }
 
 #eva-env-bar-dropdown {
@@ -166,18 +157,6 @@
 #eva-env-bar-dropdown .eva-dd-name {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-}
-
-#eva-env-bar-dropdown .eva-dd-count {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.07);
-  color: #555;
-  font-size: 10px;
-  font-weight: 600;
-  vertical-align: middle;
 }
 
 #eva-env-bar-dropdown .eva-dd-time {
@@ -616,6 +595,286 @@ html.eva-buddy-dark #root hr {
 }
 
 /* -----------------------------------------------------------
+   Control-room settings — clipboard button docked between the
+   value field and the trashcan, value field shortened a touch.
+   Lives inside EVA's #root, so under our dark-mode invert it gets
+   inverted along with EVA's own buttons (authored light, like them).
+   ----------------------------------------------------------- */
+.eva-setting-copy-btn {
+  width: 100%;
+  height: 100%;
+  min-width: 1.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.eva-setting-copy-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.eva-setting-copy-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.32);
+}
+
+.eva-setting-copy-btn:active { transform: scale(0.95); }
+
+.eva-setting-copy-btn.eva-copied {
+  color: #16a34a;
+  border-color: #16a34a;
+}
+
+.eva-setting-value-short { max-width: 360px; }
+
+/* -----------------------------------------------------------
+   Roles & rights — header filter toggle (hide all-off rows).
+   Lives in EVA's #root, so it inverts with our dark mode like
+   EVA's own icon buttons — authored light.
+   ----------------------------------------------------------- */
+.eva-roles-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  padding: 0.4375rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.eva-roles-filter-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.eva-roles-filter-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.32);
+}
+
+.eva-roles-filter-btn:active { transform: scale(0.95); }
+
+/* Active = filtering on. Blue fill mirrors EVA's own selected-control accent. */
+.eva-roles-filter-btn.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+/* -----------------------------------------------------------
+   Roles & rights — cross-environment compare.
+   In-table pieces (button, toolbar, badge, outline) live inside
+   EVA's #root and ride the dark-mode invert; the modal is a body
+   sibling (outside #root) so it's authored for the real theme.
+   ----------------------------------------------------------- */
+.eva-cmp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  margin-right: 4px;
+  padding: 0.4375rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+  vertical-align: middle;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.eva-cmp-btn svg { width: 16px; height: 16px; display: block; }
+.eva-cmp-btn:hover { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.32); }
+.eva-cmp-btn:active { transform: scale(0.95); }
+
+/* Shared EVA Buddy toolbar above the functionalities table — branded with a
+   subtle purple tint (our colour) so it reads as ours, not EVA. Lives inside
+   #root, so it rides the dark-mode invert. */
+#eva-eb-roles-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+  padding: 7px 10px 7px 12px;
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  border-radius: 8px;
+  background: rgba(124, 58, 237, 0.06);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #111;
+}
+#eva-eb-roles-toolbar .eva-eb-brand {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: #6d28d9;
+}
+#eva-eb-roles-toolbar .eva-eb-tools { display: inline-flex; align-items: center; gap: 6px; }
+#eva-eb-roles-toolbar .eva-eb-compare { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; }
+#eva-eb-roles-toolbar .eva-cmp-pair { font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+#eva-eb-roles-toolbar .eva-cmp-arrow { color: #888; }
+#eva-eb-roles-toolbar .eva-cmp-role { color: #666; font-weight: 400; }
+#eva-eb-roles-toolbar .eva-cmp-count {
+  background: #fef3c7; color: #92400e; border-radius: 6px;
+  padding: 3px 10px; font-size: 12px; font-weight: 600;
+}
+#eva-eb-roles-toolbar .eva-cmp-onlydiff,
+#eva-eb-roles-toolbar .eva-cmp-exit {
+  border: 1px solid rgba(0, 0, 0, 0.18); background: transparent; color: #111;
+  border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+}
+#eva-eb-roles-toolbar .eva-cmp-onlydiff.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+#eva-eb-roles-toolbar .eva-cmp-exit { margin-left: auto; }
+/* The filter + compare buttons sit in the toolbar now — drop their stray margins. */
+#eva-eb-roles-toolbar .eva-roles-filter-btn,
+#eva-eb-roles-toolbar .eva-cmp-btn { margin: 0; vertical-align: middle; }
+
+.eva-cmp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 2px; }
+.eva-cmp-sq { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+/* Differing cell: subtle blue inset frame around EVA's own control. */
+.eva-cmp-diff { box-shadow: inset 0 0 0 1px #378add; border-radius: 6px; }
+
+/* The floating "other environment value" badge, pinned to the cell corner.
+   Its left tab is the OTHER environment's colour (set inline). */
+.eva-cmp-badge {
+  position: absolute;
+  top: -1px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border: 0.5px solid rgba(0, 0, 0, 0.25);
+  border-left: 2px solid #dc2626;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Keep state squares + env dots true-coloured under the dark-mode invert
+   (cancel #root's filter so the hue doesn't flip). */
+html.eva-buddy-dark #root .eva-cmp-sq,
+html.eva-buddy-dark #root .eva-cmp-dot {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Compare modal — body sibling, not inverted; authored for the real theme. */
+#eva-cmp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #111;
+  font-size: 13px;
+}
+#eva-cmp-modal .eva-cmp-card {
+  width: 520px; max-width: calc(100vw - 32px);
+  background: #fff; border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25); overflow: hidden;
+}
+#eva-cmp-modal .eva-cmp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid rgba(0, 0, 0, 0.08); background: #f9fafb;
+}
+#eva-cmp-modal .eva-cmp-head strong { font-size: 14px; font-weight: 600; }
+#eva-cmp-modal .eva-cmp-close {
+  background: transparent; border: none; font-size: 20px; line-height: 1;
+  cursor: pointer; color: #6b7280; padding: 2px 8px; border-radius: 4px;
+}
+#eva-cmp-modal .eva-cmp-close:hover { background: rgba(0, 0, 0, 0.05); color: #111; }
+#eva-cmp-modal .eva-cmp-body { padding: 14px 16px 16px; }
+#eva-cmp-modal .eva-cmp-intro {
+  margin: 0 0 10px; color: #4b5563; font-size: 12px; line-height: 1.55;
+}
+#eva-cmp-modal .eva-cmp-steps {
+  margin: 0 0 14px; padding-left: 20px; color: #4b5563; font-size: 12px; line-height: 1.7;
+}
+#eva-cmp-modal .eva-cmp-steps li { margin-bottom: 5px; }
+#eva-cmp-modal .eva-cmp-sidelabel {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+  color: #9ca3af; margin: 0 0 6px;
+}
+#eva-cmp-modal .eva-cmp-side {
+  display: flex; align-items: center; gap: 8px;
+  border: 0.5px solid rgba(0, 0, 0, 0.12); border-radius: 6px;
+  padding: 9px 11px; margin-bottom: 12px;
+}
+#eva-cmp-modal .eva-cmp-side strong { text-transform: capitalize; }
+#eva-cmp-modal .eva-cmp-muted { color: #6b7280; }
+#eva-cmp-modal .eva-cmp-ok { margin-left: auto; color: #15803d; }
+#eva-cmp-modal .eva-cmp-captureall {
+  border: 0.5px solid rgba(0, 0, 0, 0.2); background: #fff; color: #2563eb;
+  border-radius: 6px; padding: 4px 10px; font: 500 12px/1 inherit; cursor: pointer; white-space: nowrap;
+}
+#eva-cmp-modal .eva-cmp-captureall:hover { background: #f3f4f6; }
+#eva-cmp-modal .eva-cmp-captureall:disabled { opacity: 0.6; cursor: default; }
+#eva-cmp-modal .eva-cmp-url {
+  width: 100%; box-sizing: border-box; padding: 8px 10px; font: inherit; font-size: 13px;
+  border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 6px; outline: none; margin-bottom: 8px;
+}
+#eva-cmp-modal .eva-cmp-url:focus { border-color: #2563eb; }
+#eva-cmp-modal .eva-cmp-status { font-size: 12px; min-height: 18px; color: #6b7280; }
+#eva-cmp-modal .eva-cmp-status.ok { color: #15803d; }
+#eva-cmp-modal .eva-cmp-status.warn { color: #92400e; }
+#eva-cmp-modal .eva-cmp-status.err { color: #b91c1c; }
+#eva-cmp-modal .eva-cmp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+#eva-cmp-modal .eva-cmp-actions button {
+  padding: 7px 14px; border: 0.5px solid rgba(0, 0, 0, 0.2); border-radius: 6px;
+  background: #fff; font: 500 13px/1 inherit; cursor: pointer;
+}
+#eva-cmp-modal .eva-cmp-actions button.eva-cmp-go { background: #2563eb; color: #fff; border-color: #2563eb; }
+#eva-cmp-modal .eva-cmp-actions button.eva-cmp-go:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Dark mode — the modal is a <body> sibling (outside #root), so the dark-mode
+   invert never reaches it; style it explicitly, like the module menu does. */
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-card { background: #2a2a2c; color: #e8e8ea; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-head { background: #232325; border-bottom-color: rgba(255, 255, 255, 0.1); }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-close { color: #a1a1a6; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-intro,
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-steps { color: #c7c7cc; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-sidelabel { color: #8e8e93; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-side { border-color: rgba(255, 255, 255, 0.14); }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-muted { color: #a1a1a6; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-captureall { background: #1a1a1c; color: #6ea8fe; border-color: rgba(255, 255, 255, 0.2); }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-captureall:hover { background: #2f2f31; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-url { background: #1a1a1c; color: #e8e8ea; border-color: rgba(255, 255, 255, 0.2); }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-status { color: #a1a1a6; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-status.ok { color: #4ade80; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-status.warn { color: #fbbf24; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-status.err { color: #f87171; }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-actions button { background: #1a1a1c; color: #e8e8ea; border-color: rgba(255, 255, 255, 0.2); }
+html.eva-buddy-dark #eva-cmp-modal .eva-cmp-actions button.eva-cmp-go { background: #2563eb; color: #fff; border-color: #2563eb; }
+/* Env dots in the modal are outside #root, so they're NOT inverted — leave their true colours. */
+
+/* -----------------------------------------------------------
    Price-list CSV upload — docked button + modal.
    ----------------------------------------------------------- */
 /* Match EVA's own icon-button chrome (border-default, transparent bg,
@@ -834,15 +1093,15 @@ html.eva-buddy-dark #root hr {
   background: #f3f4f6;
 }
 
-#eva-price-csv-modal .eva-csv-start,
-#eva-price-csv-modal .eva-csv-close-done {
+#eva-price-csv-modal .eva-csv-actions button.eva-csv-start,
+#eva-price-csv-modal .eva-csv-actions button.eva-csv-close-done {
   background: #2563eb;
   color: #fff;
   border-color: #2563eb;
 }
 
-#eva-price-csv-modal .eva-csv-start:hover,
-#eva-price-csv-modal .eva-csv-close-done:hover {
+#eva-price-csv-modal .eva-csv-actions button.eva-csv-start:hover,
+#eva-price-csv-modal .eva-csv-actions button.eva-csv-close-done:hover {
   background: #1d4ed8;
   border-color: #1d4ed8;
 }

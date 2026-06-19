@@ -1,6 +1,6 @@
 /*
  * Page chrome: EVA dark mode, the colored env stripe + lip (with live
- * capture count), the captured-responses dropdown (grouped by endpoint,
+ * the captured-responses dropdown (one row per call, newest first,
  * filterable, clearable), the tinted favicon, and the 🚀 title prefix.
  */
 (() => {
@@ -70,28 +70,22 @@
       return;
     }
 
-    // Group repeat calls by endpoint; captures are newest-first, so the
-    // first capture we see per endpoint is the one a click opens.
-    const groups = new Map(); // endpoint -> { endpoint, count, newest }
-    for (const c of EB.captures) {
-      let g = groups.get(c.endpoint);
-      if (!g) { g = { endpoint: c.endpoint, count: 0, newest: c }; groups.set(c.endpoint, g); }
-      g.count++;
-    }
-
+    // One row per call, newest-first — a chronological record. Repeat calls
+    // to the same endpoint each get their own row so any of them can be
+    // opened, not just the latest.
     const f = ddFilter.trim().toLowerCase();
-    const visible = Array.from(groups.values()).filter(
-      (g) => !f || g.endpoint.toLowerCase().includes(f)
-    );
+    const visible = f
+      ? EB.captures.filter((c) => c.endpoint.toLowerCase().includes(f))
+      : EB.captures;
     if (visible.length === 0) {
       list.innerHTML = '<div class="eva-dd-empty">No endpoints match the filter.</div>';
       return;
     }
 
-    list.innerHTML = visible.map((g) =>
-      `<button type="button" class="eva-dd-row" data-cap-id="${g.newest.id}">
-        <span class="eva-dd-name">${escapeHtml(g.endpoint)}${g.count > 1 ? '<span class="eva-dd-count">×' + g.count + "</span>" : ""}</span>
-        <span class="eva-dd-time">${formatRelativeTime(g.newest.timestamp)}</span>
+    list.innerHTML = visible.map((c) =>
+      `<button type="button" class="eva-dd-row" data-cap-id="${c.id}">
+        <span class="eva-dd-name">${escapeHtml(c.endpoint)}</span>
+        <span class="eva-dd-time">${formatRelativeTime(c.timestamp)}</span>
       </button>`
     ).join("");
     list.querySelectorAll(".eva-dd-row").forEach((btn) => {
@@ -161,15 +155,8 @@
   };
 
   // -----------------------------------------------------------
-  // Top bar + lip (lip shows the live capture count)
+  // Top bar + lip
   // -----------------------------------------------------------
-  const updateLip = () => {
-    const lip = document.getElementById(BAR_LIP_ID);
-    if (!lip) return;
-    const n = EB.captures.length;
-    lip.innerHTML = "▾" + (n ? ' <span class="eva-lip-count">' + n + "</span>" : "");
-  };
-
   const injectBar = () => {
     if (document.getElementById(BAR_ID)) return;
     const bar = document.createElement("div");
@@ -191,15 +178,12 @@
     bar.appendChild(lip);
 
     (document.body || document.documentElement).appendChild(bar);
-    updateLip();
   };
 
   EB.onCapture(() => {
-    updateLip();
     if (dropdownIsOpen()) renderDdList();
   });
   EB.onCapturesCleared(() => {
-    updateLip();
     if (dropdownIsOpen()) renderDdList();
   });
 
