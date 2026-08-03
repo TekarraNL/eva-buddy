@@ -1,13 +1,14 @@
 /*
- * Roles & rights → compare a role's permissions across environments.
+ * Roles & rights → compare a role's permissions against another role — either
+ * the same role in a different environment, or a different role in this one.
  *
- * Each environment's role page can only be read by a tab *in* that environment
- * (auth is per-origin), so this works by every roles page stashing its own
- * functionality matrix into chrome.storage.local keyed by the role's Code
- * (stable across environments — the URL's numeric id is not). When you compare,
- * we read the other environment's stashed matrix and float a small badge onto
- * each cell that differs, showing the OTHER environment's value in its state
- * colour. EVA's native dropdowns are left untouched and still editable.
+ * Each role page stashes its own functionality matrix into chrome.storage.local
+ * (an env's page can only be read by a tab in that env — auth is per-origin;
+ * the extension's own storage is shared across its tabs). The compare target is
+ * identified by the URL you paste — its (environment, role id) — and the diff
+ * is by functionality NAME, so the two roles' Codes needn't relate. We float a
+ * small badge onto each cell that differs, showing the OTHER role's value in its
+ * state colour. EVA's native dropdowns are left untouched and still editable.
  *
  * Off semantics match the filter: '', '-', and 'Off' all normalise to off, so
  * dash-vs-Off is "same"; On / Elevated / Verification are distinct states.
@@ -240,7 +241,7 @@
   // -----------------------------------------------------------
   // Compare state + overlay rendering
   // -----------------------------------------------------------
-  const compare = { active: false, otherEnv: null, otherMatrix: null, otherRole: null, onlyDiff: true, diffCount: 0 };
+  const compare = { active: false, thisRole: "", otherEnv: null, otherMatrix: null, otherRole: null, onlyDiff: true, diffCount: 0 };
 
   const clearOverlays = () => {
     document.querySelectorAll(".eva-cmp-badge").forEach((e) => e.remove());
@@ -329,11 +330,12 @@
     if (tools) tools.hidden = true; // compare controls take over the bar
     if (!cmp) return;
     cmp.hidden = false;
-    const sig = EB.env.key + ">" + compare.otherEnv;
+    const sig = EB.env.key + "|" + compare.thisRole + ">" + compare.otherEnv + "|" + compare.otherRole;
     if (cmp.dataset.pair !== sig) {
       cmp.dataset.pair = sig;
       cmp.innerHTML =
         '<span class="eva-cmp-pair">' + dot(EB.env.key) + EB.env.key +
+          '<span class="eva-cmp-role"> · ' + escapeHtml(compare.thisRole || "") + "</span>" +
           ' <span class="eva-cmp-arrow">⇄</span> ' + dot(compare.otherEnv) + compare.otherEnv +
           '<span class="eva-cmp-role"> · ' + escapeHtml(compare.otherRole || "") + "</span></span>" +
         '<span class="eva-cmp-count">0 differ</span>' +
@@ -423,15 +425,15 @@
     overlay.innerHTML =
       '<div class="eva-cmp-card">' +
         '<header class="eva-cmp-head">' +
-          "<strong>Compare role across environments</strong>" +
+          "<strong>Compare role permissions</strong>" +
           '<button type="button" class="eva-cmp-close" aria-label="Close">×</button>' +
         "</header>" +
         '<div class="eva-cmp-body">' +
-          '<p class="eva-cmp-intro">Shows where this role\'s permissions differ from another environment. You must be signed in to <strong>both</strong>, and roles are matched by their <strong>Code</strong> — so use the exact same role on each.</p>' +
+          '<p class="eva-cmp-intro">Shows where this role\'s permissions differ from another — either the same role in a <strong>different environment</strong>, or a <strong>different role</strong> in this one. The role you compare against is identified by the URL you paste; the comparison itself is by functionality name.</p>' +
           '<ol class="eva-cmp-steps">' +
-            "<li><strong>On the other environment</strong> (a separate tab): open this same role, click the compare button, and press <em>Capture all</em> there. EVA only shows 100 rows per page, so this reads every page — let it finish.</li>" +
-            "<li><strong>Here:</strong> press <em>Capture all</em> below to read this side too.</li>" +
-            "<li>Paste the other environment's role URL into the box, then click <em>Compare</em>. Differences appear right in the table.</li>" +
+            "<li><strong>Open the role to compare against</strong> — another environment (separate tab, signed in) or another role here — click its compare button, and press <em>Capture all</em> there. EVA only shows 100 rows per page, so this reads every page — let it finish.</li>" +
+            "<li><strong>Here:</strong> press <em>Capture all</em> below to read this role too.</li>" +
+            "<li>Paste that role's URL into the box, then click <em>Compare</em>. Differences appear right in the table.</li>" +
           "</ol>" +
           '<div class="eva-cmp-sidelabel">This side</div>' +
           '<div class="eva-cmp-side">' + dot(EB.env.key) +
@@ -441,7 +443,7 @@
             '<button type="button" class="eva-cmp-captureall">Capture all</button>' +
           "</div>" +
           '<div class="eva-cmp-sidelabel">Compare against</div>' +
-          '<input type="text" class="eva-cmp-url" placeholder="Paste the role’s URL from the other environment" autocomplete="off" />' +
+          '<input type="text" class="eva-cmp-url" placeholder="Paste the other role’s URL (any environment)" autocomplete="off" />' +
           '<div class="eva-cmp-status"></div>' +
           '<div class="eva-cmp-actions">' +
             '<button type="button" class="eva-cmp-cancel">Cancel</button>' +
@@ -482,62 +484,64 @@
       await refreshThis();
     });
 
+    const myId = roleIdFromUrl(location.pathname);
+
     const evaluate = async () => {
       resolved = null;
       goBtn.disabled = true;
       const url = $(".eva-cmp-url").value;
       if (!url.trim()) {
-        statusEl.textContent = "Paste the other environment's role URL above to continue.";
+        statusEl.textContent = "Paste a role URL to compare against — another environment, or another role here.";
         statusEl.className = "eva-cmp-status";
         return;
       }
       const env = envFromUrl(url);
       if (!env) { statusEl.textContent = "Not an EVA URL."; statusEl.className = "eva-cmp-status err"; return; }
-      if (env === EB.env.key) { statusEl.textContent = "That's the same environment you're on."; statusEl.className = "eva-cmp-status err"; return; }
-      if (!code) { statusEl.textContent = "Couldn't read this role's Code."; statusEl.className = "eva-cmp-status err"; return; }
-      let data = await readStored(code, env);
-      let mismatch = false;
-      let candidateCode = code;
-      if (!data || !data.matrix || !Object.keys(data.matrix).length) {
-        // Exact Code match failed. The same role often has a DIFFERENT Code
-        // per environment, so don't block — find this env's captured entry by
-        // the pasted URL's role id, then by role name, then a lone entry. The
-        // diff itself is by functionality name, so codes needn't match.
-        const all = await readAllScopes();
-        const envEntries = all.filter((r) => r.env === env && r.count > 0);
-        if (envEntries.length === 0) {
-          statusEl.innerHTML = dot(env) + "Nothing captured on <strong>" + env +
-            "</strong> yet. On a separate " + env + " tab (signed in), open this role and click " +
-            "<em>Capture all</em>, then come back.";
-          statusEl.className = "eva-cmp-status warn";
-          return;
-        }
-        const pastedId = roleIdFromUrl(url);
-        const pick =
-          (pastedId && envEntries.find((r) => r.roleId && String(r.roleId) === String(pastedId))) ||
-          envEntries.find((r) => (r.role || "").toLowerCase() === (roleName() || "").toLowerCase()) ||
-          envEntries[0];
-        data = await readStored(pick.code, env);
-        candidateCode = pick.code;
-        mismatch = true;
-      }
-      if (!data || !data.matrix) {
-        statusEl.textContent = "Couldn't load the other environment's data.";
+      const pastedId = roleIdFromUrl(url);
+      // Comparing a role against itself makes no sense.
+      if (env === EB.env.key && pastedId && myId && String(pastedId) === String(myId)) {
+        statusEl.textContent = "That's the role you're already looking at — pick a different one.";
         statusEl.className = "eva-cmp-status err";
         return;
       }
-      resolved = { env, data };
-      const n = Object.keys(data.matrix).length;
-      if (mismatch) {
-        statusEl.innerHTML = dot(env) + "<strong>" + env + "</strong> · " + escapeHtml(data.role || "") +
-          " · " + escapeHtml(candidateCode) + " (" + n + "). Code differs from <strong>" +
-          escapeHtml(code) + "</strong> — comparing by functionality name.";
+      // Identify the target from the pasted URL's (env, role id). The current
+      // role is excluded so a same-env compare never picks itself. Comparison
+      // is by functionality name, so the roles' Codes needn't relate.
+      const all = await readAllScopes();
+      const isSelf = (r) =>
+        r.env === EB.env.key && ((myId && String(r.roleId) === String(myId)) || (code && r.code === code));
+      const pool = all.filter((r) => r.env === env && r.count > 0 && !isSelf(r));
+      if (pool.length === 0) {
+        const where = env === EB.env.key ? "this environment" : ("the " + env + " environment");
+        statusEl.innerHTML = dot(env) + "Nothing captured for that role in " + where +
+          " yet. Open it (signed in), press <em>Capture all</em>, then come back.";
         statusEl.className = "eva-cmp-status warn";
-      } else {
-        statusEl.innerHTML = dot(env) + "<strong>" + env + "</strong> · " +
-          escapeHtml(data.role || "") + " · " + n + " captured";
-        statusEl.className = "eva-cmp-status ok";
+        return;
       }
+      let pick = pastedId ? pool.find((r) => r.roleId && String(r.roleId) === String(pastedId)) : null;
+      // Cross-env same role captured before role ids were stored → match by name.
+      if (!pick && env !== EB.env.key) {
+        pick = pool.find((r) => (r.role || "").toLowerCase() === (roleName() || "").toLowerCase());
+      }
+      // A single captured entry and no role id in the URL → use it.
+      if (!pick && !pastedId && pool.length === 1) pick = pool[0];
+      if (!pick) {
+        statusEl.innerHTML = dot(env) + "Couldn't match that URL to a captured role. Open it and press " +
+          "<em>Capture all</em> first.";
+        statusEl.className = "eva-cmp-status warn";
+        return;
+      }
+      const data = await readStored(pick.code, env);
+      if (!data || !data.matrix) {
+        statusEl.textContent = "Couldn't load that role's data.";
+        statusEl.className = "eva-cmp-status err";
+        return;
+      }
+      resolved = { env, data, role: data.role || pick.role || "", code: pick.code };
+      const n = Object.keys(data.matrix).length;
+      statusEl.innerHTML = dot(env) + "<strong>" + env + "</strong> · " +
+        escapeHtml(resolved.role || "(unnamed)") + " · " + escapeHtml(pick.code) + " · " + n + " captured";
+      statusEl.className = "eva-cmp-status ok";
       goBtn.disabled = false;
     };
 
@@ -546,9 +550,10 @@
     goBtn.addEventListener("click", () => {
       if (!resolved) return;
       compare.active = true;
+      compare.thisRole = roleName();
       compare.otherEnv = resolved.env;
+      compare.otherRole = resolved.role || "";
       compare.otherMatrix = resolved.data.matrix;
-      compare.otherRole = resolved.data.role || "";
       compare.onlyDiff = true;
       EB._cmpActive = true;
       close();
